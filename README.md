@@ -1,12 +1,12 @@
 # Controle de combustível MACER
 
-Base inicial do aplicativo próprio: React, TypeScript, Firebase Authentication e Cloud Firestore (NoSQL). Não utiliza Google Sheets ou SQL Connect.
+Aplicativo próprio em React, TypeScript, Firebase Authentication e Cloud Firestore (NoSQL). Não utiliza Google Sheets ou SQL Connect.
 
 ## Estado atual
 
-Implementados: estrutura do projeto, configuração Firebase, tela de login/logout por e-mail e senha, regras iniciais que negam acesso ao Firestore, cálculo de competência 21–20 e testes dessa regra.
+Implementados: login/logout, perfis por unidade, cadastro de ativos e tanques pelo administrador, recebimento pelo responsável, abastecimento pelo comboísta, estoque por tanque e histórico recente. Transações gravam movimento, saldo e leitura juntos. Regras Firestore verificam o mesmo vínculo no servidor. Reenvio com o mesmo UUID não duplica a baixa; envio sem confirmação fica recuperável no aparelho.
 
-Ainda não implementados: perfis operacionais, cadastros, abastecimentos, estoque, transferências, fechamento, importação, fotos e sincronização offline. A tela informa essa condição e não apresenta dados fictícios. Esta versão não está pronta para uso operacional.
+Ainda não implementados: transferência, estorno, fechamento diário, importação histórica, fotos, valorização financeira e operação offline. Nesta etapa cada ativo tem um produto e medidor; múltiplos produtos/medidores por ativo serão incorporados antes da migração da frota. Cadastros não possuem edição/inativação pela interface ainda. Consultas carregam até 200 ativos/tanques e as últimas 50 operações, limites informados na tela. A regra de competência 21–20 existe com testes, mas relatórios por competência ainda não foram implementados. Esta versão precisa de homologação antes do uso real.
 
 ## Executar
 
@@ -28,7 +28,7 @@ O arquivo de exemplo contém a configuração pública web fornecida pelo propri
 
 O código por si só não cria nem habilita serviços. O administrador precisa verificar o projeto, habilitar Authentication com e-mail/senha, criar as contas autorizadas e escolher a localização do Firestore antes de importar dados. O cadastro público não está implementado.
 
-As regras versionadas negam todo acesso aos documentos enquanto as regras operacionais não forem desenvolvidas e testadas. Não substituir por regras abertas. Login bem-sucedido não concede permissão sobre dados.
+As regras versionadas autorizam somente usuários ativos com unidade e perfil provisionados em `users/{uid}`. Não substituir por regras abertas. Login bem-sucedido não concede permissão sobre dados. Veja [configuração e homologação](docs/configuracao.md).
 
 Não foi realizado deploy nem importação. `firebase.json` prepara Firebase Hosting estático para implantação futura; não usa App Hosting nem Cloud Functions. Deploy requer Firebase CLI autenticada e revisão das regras do projeto existente.
 
@@ -39,3 +39,13 @@ A intenção é permanecer no plano Spark, dentro das cotas vigentes. Não exist
 Não publicar planilhas, nomes de operadores, placas, custos, dados de clientes ou backups neste repositório público. A importação deve usar arquivos locais e uma etapa de conferência antes de qualquer escrita remota.
 
 Veja [a arquitetura](docs/arquitetura.md) e [a sequência de implementação](docs/implementacao.md).
+
+## Testes das regras
+
+Além dos testes de domínio, a suíte usa Java 21 e o Firestore Emulator, com projeto fictício `demo-macer`:
+
+```sh
+npm run test:rules
+```
+
+Os testes cobrem gravação atômica, reenvio, concorrência, escopos, histórico imutável, cadastros e lotes adulterados. GitHub Actions executa build, testes de domínio e emulador. Nunca usar o projeto real na suíte.
