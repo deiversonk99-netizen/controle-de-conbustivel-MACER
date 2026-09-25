@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env*
+!.env.example
+.firebase/
+*-debug.log*
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*service-account*.json
+*serviceAccount*.json
+imports/
+backups/
+
