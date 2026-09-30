@@ -31,4 +31,8 @@ Antes de transmitir, a interface conserva comando e UUID no armazenamento local,
 
 ## Estado de publicação
 
+O build de produção carrega `.env.production`, versionado com os identificadores públicos do projeto MACER e emuladores desativados. `.env.example` é apenas referência e não é carregado pelo Vite. O desenvolvimento local continua usando `.env.local`. Alterações de configuração exigem novo build e publicação; não modificam uma versão já hospedada. Variáveis definidas pela hospedagem têm precedência: conferir que não apontam para `demo-macer` nem estão vazias.
+
+Essa configuração permite inicializar o SDK e exibir o login; não habilita Authentication, cria usuários ou publica regras de banco. Não incluir contas de serviço ou senhas em arquivos `VITE_*`.
+
 Versionar código e abrir pull request não publica o site nem altera regras ou dados no Firebase. Contas, região, configuração do projeto e homologação continuam sendo etapas distintas.
