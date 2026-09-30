@@ -1,8 +1,9 @@
-import { StrictMode, useEffect, useState, type FormEvent } from 'react';
+import { StrictMode, Suspense, lazy, useEffect, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
 import { auth, firebaseConfigured } from './firebase';
 import './style.css';
+const Workspace = lazy(() => import('./Workspace'));
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -32,6 +33,7 @@ function App() {
     catch { setError('Não foi possível sair. Tente novamente.'); }
     finally { setBusy(false); }
   }
+  if (user) return <><Suspense fallback={<p role="status">Carregando operação…</p>}><Workspace user={user} onLogout={logout}/></Suspense>{error&&<p role="alert" className="error">{error}</p>}</>;
   return <main>
     <section className="intro">
       <div className="brand">MACER<span>OPERAÇÕES</span></div>
@@ -41,18 +43,15 @@ function App() {
     <section className="access" aria-label="Acesso ao sistema">
       <div className="panel">
         <p className="eyebrow">ACESSO DA EQUIPE</p>
-        <h2>{user ? 'Sessão iniciada' : 'Entre na sua conta'}</h2>
-        {!firebaseConfigured ? <p role="status">A conexão com o Firebase ainda precisa ser configurada neste ambiente.</p> : loading ? <p role="status">Verificando sessão…</p> : user ? <>
-          <p>{user.email}</p><p>Os módulos operacionais ainda estão em desenvolvimento. Nenhum lançamento pode ser registrado nesta versão.</p>
-          <button onClick={logout} disabled={busy}>Sair da conta</button>
-        </> : <form onSubmit={login}>
+        <h2>Entre na sua conta</h2>
+        {!firebaseConfigured ? <p role="status">A conexão com o Firebase ainda precisa ser configurada neste ambiente.</p> : loading ? <p role="status">Verificando sessão…</p> : <form onSubmit={login}>
           <label htmlFor="email">E-mail</label><input id="email" name="email" type="email" autoComplete="username" required disabled={busy} />
           <label htmlFor="password">Senha</label><input id="password" name="password" type="password" autoComplete="current-password" required disabled={busy} />
           <button disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
           <p className="help">Use a conta disponibilizada pelo administrador.</p>
         </form>}
         {error && <p className="error" role="alert">{error}</p>}
-        <p className="notice">Versão inicial · Operação e importação ainda não habilitadas.</p>
+        <p className="notice">Acesso restrito à equipe autorizada.</p>
       </div>
     </section>
   </main>;

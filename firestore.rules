@@ -1,9 +1,105 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Base inicial: nenhum acesso operacional antes das regras e testes de domínio.
-    match /{document=**} {
-      allow read, write: if false;
+    function member(site) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+        && site in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteIds
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'operator'];
     }
+    function manager(site) {
+      return member(site) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager'];
+    }
+    function admin(site) {
+      return member(site) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    function text(v, max) { return v is string && v.size() <= max; }
+    function positive(v) { return v is int && v > 0 && v <= 1000000000; }
+    function product(v) { return v in ['diesel-s10', 'diesel-s500', 'arla32']; }
+    function newOperation(site, id) {
+      return id is string && id.size() == 36
+        && !exists(/databases/$(database)/documents/sites/$(site)/operations/$(id));
+    }
+    match /users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      // Provisionamento confiável pelo console/Admin, nunca autoatribuição de perfil.
+      allow list, write: if false;
+    }
+    match /sites/{site}/tanks/{id} {
+      allow read: if member(site);
+      allow create: if admin(site)
+        && request.resource.data.keys().hasOnly(['name','product','capacityMl','balanceMl','active','version','lastOperationId','createdAt','updatedAt'])
+        && text(request.resource.data.name,100) && request.resource.data.name.size() > 0
+        && product(request.resource.data.product) && positive(request.resource.data.capacityMl)
+        && request.resource.data.balanceMl == 0 && request.resource.data.active == true
+        && request.resource.data.version == 0 && request.resource.data.lastOperationId == ''
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if member(site) && tankMovement(site, id);
+      allow delete: if false;
+    }
+    function tankMovement(site, id) {
+      let d = request.resource.data;
+      let op = getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(d.lastOperationId)).data;
+      return newOperation(site, d.lastOperationId)
+        && d.diff(resource.data).affectedKeys().hasOnly(['balanceMl','version','lastOperationId','updatedAt'])
+        && d.version == resource.data.version + 1 && d.updatedAt == request.time
+        && op.tankId == id && op.createdBy == request.auth.uid
+        && d.balanceMl == resource.data.balanceMl + (op.kind == 'receipt' ? op.quantityMl : -op.quantityMl)
+        && d.balanceMl >= 0 && d.balanceMl <= d.capacityMl;
+    }
+    match /sites/{site}/assets/{id} {
+      allow read: if member(site);
+      allow create: if admin(site)
+        && id.matches('^[A-Z0-9-]{1,40}$')
+        && request.resource.data.keys().hasOnly(['code','name','plate','product','capacityMl','meter','readingMilli','active','version','lastOperationId','createdAt','updatedAt'])
+        && request.resource.data.code == id && text(request.resource.data.name,100) && request.resource.data.name.size() > 0
+        && text(request.resource.data.plate,20) && product(request.resource.data.product)
+        && positive(request.resource.data.capacityMl) && request.resource.data.meter in ['hours','km']
+        && request.resource.data.readingMilli is int && request.resource.data.readingMilli >= 0 && request.resource.data.readingMilli <= 1000000000000
+        && request.resource.data.active == true && request.resource.data.version == 0 && request.resource.data.lastOperationId == ''
+        && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if member(site) && assetMovement(site, id);
+      allow delete: if false;
+    }
+    function assetMovement(site, id) {
+      let d = request.resource.data;
+      let op = getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(d.lastOperationId)).data;
+      return newOperation(site, d.lastOperationId)
+        && d.diff(resource.data).affectedKeys().hasOnly(['readingMilli','version','lastOperationId','updatedAt'])
+        && d.version == resource.data.version + 1 && d.updatedAt == request.time
+        && op.kind == 'fuel' && op.assetId == id && op.createdBy == request.auth.uid
+        && d.readingMilli == op.readingMilli && d.readingMilli >= resource.data.readingMilli;
+    }
+    match /sites/{site}/operations/{id} {
+      allow get: if member(site) && (!exists(/databases/$(database)/documents/sites/$(site)/operations/$(id)) || manager(site) || resource.data.createdBy == request.auth.uid);
+      allow list: if member(site) && (manager(site) || resource.data.createdBy == request.auth.uid);
+      allow create: if member(site) && validOperation(site, id);
+      allow update, delete: if false;
+    }
+    function validOperation(site, id) {
+      let d = request.resource.data;
+      let before = get(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
+      let after = getAfter(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
+      return id.size() == 36
+        && d.keys().hasOnly(['kind','tankId','assetId','product','quantityMl','readingMilli','reference','note','createdBy','createdAt'])
+        && d.kind in ['receipt','fuel'] && text(d.tankId,100) && text(d.assetId,40)
+        && positive(d.quantityMl) && d.readingMilli is int && d.readingMilli >= 0 && d.readingMilli <= 1000000000000
+        && text(d.reference,120) && text(d.note,500)
+        && d.createdBy == request.auth.uid && d.createdAt == request.time
+        && before.active == true && d.product == before.product
+        && after.lastOperationId == id && after.version == before.version + 1
+        && after.balanceMl == before.balanceMl + (d.kind == 'receipt' ? d.quantityMl : -d.quantityMl)
+        && after.balanceMl >= 0 && after.balanceMl <= before.capacityMl
+        && ((d.kind == 'receipt' && manager(site) && d.assetId == '' && d.readingMilli == 0 && d.reference.size() > 0)
+          || (d.kind == 'fuel' && validFuel(site, id, d)));
+    }
+    function validFuel(site, id, d) {
+      let before = get(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
+      let after = getAfter(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
+      return before.active == true && before.product == d.product
+        && d.quantityMl <= before.capacityMl && d.readingMilli >= before.readingMilli
+        && after.lastOperationId == id && after.version == before.version + 1 && after.readingMilli == d.readingMilli;
+    }
+    match /{document=**} { allow read, write: if false; }
   }
 }
