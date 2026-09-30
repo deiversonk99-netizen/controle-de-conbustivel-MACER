@@ -30,7 +30,9 @@ O código por si só não cria nem habilita serviços. O administrador precisa v
 
 As regras versionadas autorizam somente usuários ativos com unidade e perfil provisionados em `users/{uid}`. Não substituir por regras abertas. Login bem-sucedido não concede permissão sobre dados. Veja [configuração e homologação](docs/configuracao.md).
 
-Não foi realizado deploy nem importação. `firebase.json` prepara Firebase Hosting estático para implantação futura; não usa App Hosting nem Cloud Functions. Deploy requer Firebase CLI autenticada e revisão das regras do projeto existente.
+Publicado na Vercel em 30/09/2026, com Firebase Authentication por e-mail/senha e Firestore Standard em `southamerica-east1`, no plano Spark. Regras e índice composto foram configurados pelo console. O fluxo online foi validado com dados fictícios exclusivamente na unidade `homologacao`: recebimento de 100 L, abastecimento de 25,6 L e saldo persistido de 74,4 L. Acesso anônimo e a outra unidade retornaram HTTP 403. Nenhum dado da planilha foi importado; a liberação das unidades reais depende da homologação do processo.
+
+`firebase.json` mantém uma configuração opcional de Firebase Hosting; a hospedagem em uso é a Vercel, ligada à branch `main`. Não usa App Hosting nem Cloud Functions. Credenciais da conta de teste não são publicadas neste repositório.
 
 ## Custo e arquivos
 

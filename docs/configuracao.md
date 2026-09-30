@@ -6,7 +6,7 @@
 2. Habilitar Authentication por e-mail/senha e criar as contas da equipe pelo fluxo confiável do administrador.
 3. Criar/verificar Firestore Standard, escolher a região e registrar a decisão antes da importação.
 4. Provisionar um documento `users/UID_DA_CONTA` pelo console, com campos `name` (string), `active` (boolean), `role` (`admin`, `manager` ou `operator`) e `siteIds` (array de IDs de unidades, por exemplo `base`). O cliente não pode criar nem promover seu perfil.
-5. Publicar regras e índices somente após conferir o projeto e executar a suíte local. Não foram publicados nesta entrega.
+5. Publicar regras e índices somente após conferir o projeto e executar a suíte local. Publicados pelo console em 30/09/2026; o índice `operations` com `createdBy ASC` e `createdAt DESC`, escopo coleção, está ativado.
 6. Configurar `.env.local` a partir de `.env.example` e testar com contas de cada perfil. A chave web é pública; o controle efetivo está nas regras e identidades.
 
 Administrador cria ativos e tanques. Responsável registra entradas e consulta histórico da unidade. Comboísta abastece e consulta seus lançamentos. Tanques novos começam em zero; abertura histórica e ajustes ainda precisam de fluxo próprio. Não lançar saldo legado como recebimento fictício.
@@ -33,6 +33,10 @@ Antes de transmitir, a interface conserva comando e UUID no armazenamento local,
 
 O build de produção carrega `.env.production`, versionado com os identificadores públicos do projeto MACER e emuladores desativados. `.env.example` é apenas referência e não é carregado pelo Vite. O desenvolvimento local continua usando `.env.local`. Alterações de configuração exigem novo build e publicação; não modificam uma versão já hospedada. Variáveis definidas pela hospedagem têm precedência: conferir que não apontam para `demo-macer` nem estão vazias.
 
+Em 30/09/2026, a Vercel injetava as seis variáveis Firebase como strings vazias. O SDK agora usa o conjunto completo de identificadores públicos em `src/firebase-public-config.json` quando todas estão ausentes ou vazias. Configuração parcial não é mesclada com o projeto padrão, para evitar misturar projetos. Os valores públicos não concedem acesso administrativo.
+
 Essa configuração permite inicializar o SDK e exibir o login; não habilita Authentication, cria usuários ou publica regras de banco. Não incluir contas de serviço ou senhas em arquivos `VITE_*`.
 
-Versionar código e abrir pull request não publica o site nem altera regras ou dados no Firebase. Contas, região, configuração do projeto e homologação continuam sendo etapas distintas.
+O PR inicial foi integrado à `main`, e a Vercel publicou o aplicativo. Firestore `(default)` foi criado em São Paulo (`southamerica-east1`), em modo de produção, mantendo o Spark. O login por senha foi ativado e uma conta de teste recebeu perfil `admin` exclusivamente para `homologacao`, com confirmação do proprietário. Regras foram conferidas contra o conteúdo do repositório. O teste online validou cadastro de tanque/ativo, recebimento, abastecimento, horímetro e persistência após recarregar; saldo de 74,4 L. Leitura anônima e fora da unidade foi negada pela API real (403). Conta e senha foram entregues de forma privada ao proprietário, nunca versionadas.
+
+Não foram habilitados backups pagos, Storage, provedores OAuth ou serviços com cobrança. O teste por e-mail/senha na Vercel foi aprovado; domínios OAuth devem ser configurados se esses provedores forem adicionados. CLI local permanece sem autenticação; a configuração desta etapa foi realizada pelo console autenticado.
