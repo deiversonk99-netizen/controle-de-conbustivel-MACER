@@ -1,1 +1,20 @@
-{ "indexes": [{ "collectionGroup": "operations", "queryScope": "COLLECTION", "fields": [{"fieldPath":"createdBy","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}] }], "fieldOverrides": [] }
+{
+  "indexes": [
+    {
+      "collectionGroup": "operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "attachments", "fieldPath": "dataUrl", "indexes": [] },
+    { "collectionGroup": "audits", "fieldPath": "before", "indexes": [] },
+    { "collectionGroup": "audits", "fieldPath": "after", "indexes": [] },
+    { "collectionGroup": "pending", "fieldPath": "payload", "indexes": [] },
+    { "collectionGroup": "userAudits", "fieldPath": "before", "indexes": [] },
+    { "collectionGroup": "userAudits", "fieldPath": "after", "indexes": [] }
+  ]
+}

@@ -1,1 +1,332 @@
-.workspace{min-height:100svh;background:#f3f6f3}.topbar{display:flex;align-items:center;justify-content:space-between;background:#123d32;color:white;padding:20px max(24px,calc((100vw - 1200px)/2))}.topbar strong{letter-spacing:3px;font-size:24px}.topbar span{display:block;font-size:12px;margin-top:4px;color:#d0e0d7}.workspace-body{max-width:1248px;margin:auto;padding:32px 24px 60px}.page-heading{display:flex;justify-content:space-between;gap:24px;align-items:center}.page-heading h1{font-size:32px;margin:8px 0}.page-heading p{line-height:1.5}.page-heading>label{min-width:180px}.workspace select,.workspace textarea{width:100%;padding:12px;border:1px solid #9dab9f;background:white;border-radius:8px;font:inherit;color:inherit}.workspace select:focus-visible,.workspace textarea:focus-visible{outline:3px solid #cb8b35;outline-offset:2px}.workspace button{width:auto;margin:0}.workspace form button{width:100%;margin-top:24px}.tabs{display:flex;gap:8px;margin:24px 0;flex-wrap:wrap}.tabs button{background:#e2e9e2;color:#214a38;font-size:14px}.tabs .selected{background:#17563e;color:white}.operation-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:24px}.card{background:white;border:1px solid #dde5dc;border-radius:12px;padding:28px;min-width:0}.card h2{font-size:22px;margin:0 0 16px}.workspace fieldset{border:0;margin:0;padding:0;min-width:0}.muted{font-size:13px;line-height:1.6;color:#55695d}.secondary{background:#e6eee7!important;color:#204831!important;padding:10px 16px!important;font-size:13px!important}.aside-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.aside-heading h2{margin:0}.tank-summary{display:flex;flex-direction:column;gap:6px;padding:22px 0;border-bottom:1px solid #e3e9e1}.tank-summary span{font-size:12px;color:#55695d}.tank-summary b{font-size:28px;font-weight:500}.tank-summary small{font-size:14px}.success{background:#e0f1e6;color:#164c31;padding:16px;border-radius:8px;overflow-wrap:anywhere}.table-scroll{overflow:auto}.workspace table{width:100%;border-collapse:collapse;font-size:13px}.workspace th,.workspace td{padding:14px 8px;text-align:left;border-bottom:1px solid #e3e9e1}.workspace th{font-weight:600;color:#526658}.workspace td small{display:block;color:#647666;margin-top:4px}@media(max-width:800px){.operation-layout{grid-template-columns:1fr}.page-heading{display:block}.workspace-body{padding:24px 16px}.card{padding:20px}.page-heading h1{font-size:28px}.tabs button{flex:1}.topbar{padding:16px 24px}}
+.workspace {
+  min-height: 100svh;
+  background: #f3f6f3;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #123d32;
+  color: white;
+  padding: 20px max(24px, calc((100vw - 1200px) / 2));
+}
+.topbar strong {
+  letter-spacing: 3px;
+  font-size: 24px;
+}
+.topbar span {
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+  color: #d0e0d7;
+}
+.workspace-body {
+  max-width: 1248px;
+  margin: auto;
+  padding: 32px 24px 60px;
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+}
+.page-heading h1 {
+  font-size: 32px;
+  margin: 8px 0;
+}
+.page-heading p {
+  line-height: 1.5;
+}
+.page-heading > label {
+  min-width: 180px;
+}
+.workspace select,
+.workspace textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #9dab9f;
+  background: white;
+  border-radius: 8px;
+  font: inherit;
+  color: inherit;
+}
+.workspace select:focus-visible,
+.workspace textarea:focus-visible {
+  outline: 3px solid #cb8b35;
+  outline-offset: 2px;
+}
+.workspace button {
+  width: auto;
+  margin: 0;
+}
+.workspace form button {
+  width: 100%;
+  margin-top: 24px;
+}
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 24px 0;
+  flex-wrap: wrap;
+}
+.tabs button {
+  background: #e2e9e2;
+  color: #214a38;
+  font-size: 14px;
+}
+.tabs .selected {
+  background: #17563e;
+  color: white;
+}
+.operation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: 24px;
+}
+.card {
+  background: white;
+  border: 1px solid #dde5dc;
+  border-radius: 12px;
+  padding: 28px;
+  min-width: 0;
+}
+.card h2 {
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+.workspace fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.muted {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #55695d;
+}
+.secondary {
+  background: #e6eee7 !important;
+  color: #204831 !important;
+  padding: 10px 16px !important;
+  font-size: 13px !important;
+}
+.aside-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.aside-heading h2 {
+  margin: 0;
+}
+.tank-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 22px 0;
+  border-bottom: 1px solid #e3e9e1;
+}
+.tank-summary span {
+  font-size: 12px;
+  color: #55695d;
+}
+.tank-summary b {
+  font-size: 28px;
+  font-weight: 500;
+}
+.tank-summary small {
+  font-size: 14px;
+}
+.success {
+  background: #e0f1e6;
+  color: #164c31;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.table-scroll {
+  overflow: auto;
+}
+.workspace table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.workspace th,
+.workspace td {
+  padding: 14px 8px;
+  text-align: left;
+  border-bottom: 1px solid #e3e9e1;
+}
+.workspace th {
+  font-weight: 600;
+  color: #526658;
+}
+.workspace td small {
+  display: block;
+  color: #647666;
+  margin-top: 4px;
+}
+@media (max-width: 800px) {
+  .operation-layout {
+    grid-template-columns: 1fr;
+  }
+  .page-heading {
+    display: block;
+  }
+  .workspace-body {
+    padding: 24px 16px;
+  }
+  .card {
+    padding: 20px;
+  }
+  .page-heading h1 {
+    font-size: 28px;
+  }
+  .tabs button {
+    flex: 1;
+  }
+  .topbar {
+    padding: 16px 24px;
+  }
+}
+.connection {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #e0f1e6;
+  font-size: 13px;
+}
+.connection.offline,
+.warning {
+  background: #fff0d2;
+  color: #704900;
+  padding: 12px;
+  border-radius: 8px;
+}
+.sync-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin: 16px 0;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.form-grid label {
+  min-width: 0;
+}
+.form-grid input,
+.form-grid select {
+  margin-top: 8px;
+}
+.form-grid small {
+  display: block;
+  margin-top: 6px;
+  font-weight: 400;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+.stats > .card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.stats > .card > b {
+  font-size: 30px;
+}
+.stock {
+  margin-top: 24px;
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.queue-item {
+  padding: 20px 0;
+  border-bottom: 1px solid #dce5df;
+  overflow-wrap: anywhere;
+}
+.detail {
+  padding: 20px;
+  background: #f1f6f2;
+  margin-top: 20px;
+  overflow-wrap: anywhere;
+}
+.proof {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  margin: 20px 0;
+}
+.workspace pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.workspace details {
+  border-bottom: 1px solid #ddd;
+  padding: 16px 0;
+}
+.workspace input[type='file'] {
+  font-size: 13px;
+}
+.workspace .card + .card {
+  margin-top: 16px;
+}
+.workspace input,
+.workspace select,
+.workspace textarea {
+  min-height: 44px;
+}
+.workspace button {
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .sync-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .stats {
+    grid-template-columns: 1fr;
+  }
+  .tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .tabs button {
+    flex: 0 0 auto;
+    padding: 12px 16px;
+  }
+  .workspace h1 {
+    font-size: 28px;
+  }
+  .detail {
+    padding: 14px;
+  }
+  .workspace table {
+    min-width: 500px;
+  }
+  .workspace .topbar {
+    padding: 16px;
+  }
+  .workspace .card {
+    padding: 18px;
+  }
+}
