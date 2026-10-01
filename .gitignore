@@ -1,5 +1,8 @@
 node_modules/
+test-results/
+test-*.log
 dist/
+dist-e2e/
 .env*
 !.env.example
 !.env.production

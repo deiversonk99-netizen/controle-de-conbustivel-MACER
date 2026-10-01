@@ -21,20 +21,41 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/sites/$(site)/operations/$(id));
     }
     match /users/{uid} {
-      allow get: if request.auth != null && request.auth.uid == uid;
-      // Provisionamento confiável pelo console/Admin, nunca autoatribuição de perfil.
-      allow list, write: if false;
+      allow get: if request.auth != null && (request.auth.uid == uid || (profileAdmin() && (!exists(/databases/$(database)/documents/users/$(uid)) || scopedProfile(resource.data))));
+      allow list: if profileAdmin() && scopedProfile(resource.data);
+      allow create, update: if profileAdmin() && uid != request.auth.uid && validProfile(uid);
+      allow delete: if false;
+    }
+    function profileAdmin() { return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
+    function scopedProfile(d) { return d.siteIds.size() == 1 && d.siteIds[0] in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteIds; }
+    function validProfile(uid) {
+      let d = request.resource.data;
+      let a = getAfter(/databases/$(database)/documents/sites/$(d.siteIds[0])/userAudits/$(d.auditId)).data;
+      return d.keys().hasOnly(['name','email','role','active','siteIds','auditId','updatedAt'])
+        && scopedProfile(d) && (resource == null || (scopedProfile(resource.data) && resource.data.role != 'admin' && d.siteIds == resource.data.siteIds))
+        && text(d.name,100) && d.name.size() > 0 && text(d.email,254) && d.role in ['operator','manager'] && d.active is bool && d.updatedAt == request.time
+        && !exists(/databases/$(database)/documents/sites/$(d.siteIds[0])/userAudits/$(d.auditId))
+        && a.subjectId == uid && a.before == (resource == null ? {} : resource.data) && a.after == d && a.createdBy == request.auth.uid && a.createdAt == request.time;
+    }
+    match /sites/{site}/userAudits/{id} {
+      allow read: if admin(site);
+      allow create: if admin(site) && request.resource.data.keys().hasOnly(['subjectId','before','after','reason','createdBy','createdAt'])
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time && text(request.resource.data.reason,500) && request.resource.data.reason.size() > 0
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.subjectId)).data.auditId == id
+        && getAfter(/databases/$(database)/documents/users/$(request.resource.data.subjectId)).data.siteIds == [site];
     }
     match /sites/{site}/tanks/{id} {
       allow read: if member(site);
       allow create: if admin(site)
-        && request.resource.data.keys().hasOnly(['name','product','capacityMl','balanceMl','active','version','lastOperationId','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['name','product','capacityMl','balanceMl','active','version','lastOperationId','createdAt','updatedAt','minimumMl','auditId'])
+        && request.resource.data.get('minimumMl',0) is int && request.resource.data.get('minimumMl',0) >= 0 && request.resource.data.get('minimumMl',0) <= request.resource.data.capacityMl
+        && (!('auditId' in request.resource.data) || auditPair(site,'tanks',id,{},request.resource.data))
         && text(request.resource.data.name,100) && request.resource.data.name.size() > 0
         && product(request.resource.data.product) && positive(request.resource.data.capacityMl)
         && request.resource.data.balanceMl == 0 && request.resource.data.active == true
         && request.resource.data.version == 0 && request.resource.data.lastOperationId == ''
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
-      allow update: if member(site) && tankMovement(site, id);
+      allow update: if member(site) && (tankMovement(site, id) || catalogEdit(site,'tanks',id) || closeMovement(site,id));
       allow delete: if false;
     }
     function tankMovement(site, id) {
@@ -43,37 +64,41 @@ service cloud.firestore {
       return newOperation(site, d.lastOperationId)
         && d.diff(resource.data).affectedKeys().hasOnly(['balanceMl','version','lastOperationId','updatedAt'])
         && d.version == resource.data.version + 1 && d.updatedAt == request.time
-        && op.tankId == id && op.createdBy == request.auth.uid
-        && d.balanceMl == resource.data.balanceMl + (op.kind == 'receipt' ? op.quantityMl : -op.quantityMl)
+        && (op.tankId == id || (op.get('destinationTankId','') == id && op.get('originalKind',op.kind) == 'transfer') || (op.kind == 'transfer' && op.destinationTankId == id)) && op.createdBy == request.auth.uid
+        && d.balanceMl == resource.data.balanceMl + movement(op,id)
         && d.balanceMl >= 0 && d.balanceMl <= d.capacityMl;
     }
     match /sites/{site}/assets/{id} {
       allow read: if member(site);
       allow create: if admin(site)
         && id.matches('^[A-Z0-9-]{1,40}$')
-        && request.resource.data.keys().hasOnly(['code','name','plate','product','capacityMl','meter','readingMilli','active','version','lastOperationId','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['code','name','plate','product','capacityMl','meter','readingMilli','active','version','lastOperationId','createdAt','updatedAt','type','model','owner','ownership','capacities','auditId'])
+        && assetExtras(request.resource.data)
+        && (!('auditId' in request.resource.data) || auditPair(site,'assets',id,{},request.resource.data))
         && request.resource.data.code == id && text(request.resource.data.name,100) && request.resource.data.name.size() > 0
         && text(request.resource.data.plate,20) && product(request.resource.data.product)
         && positive(request.resource.data.capacityMl) && request.resource.data.meter in ['hours','km']
         && request.resource.data.readingMilli is int && request.resource.data.readingMilli >= 0 && request.resource.data.readingMilli <= 1000000000000
         && request.resource.data.active == true && request.resource.data.version == 0 && request.resource.data.lastOperationId == ''
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
-      allow update: if member(site) && assetMovement(site, id);
+      allow update: if member(site) && (assetMovement(site, id) || catalogEdit(site,'assets',id));
       allow delete: if false;
     }
     function assetMovement(site, id) {
       let d = request.resource.data;
       let op = getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(d.lastOperationId)).data;
       return newOperation(site, d.lastOperationId)
-        && d.diff(resource.data).affectedKeys().hasOnly(['readingMilli','version','lastOperationId','updatedAt'])
+        && d.diff(resource.data).affectedKeys().hasOnly(['readingMilli','version','lastOperationId','lastFuelId','updatedAt'])
         && d.version == resource.data.version + 1 && d.updatedAt == request.time
-        && op.kind == 'fuel' && op.assetId == id && op.createdBy == request.auth.uid
-        && d.readingMilli == op.readingMilli && d.readingMilli >= resource.data.readingMilli;
+        && (op.kind == 'fuel' || (op.kind == 'reversal' && op.originalKind == 'fuel')) && op.assetId == id && op.createdBy == request.auth.uid
+        && d.readingMilli == (op.kind == 'reversal' ? op.restoredReadingMilli : op.readingMilli)
+        && (op.get('schema',1) == 2 || !d.diff(resource.data).affectedKeys().hasAny(['lastFuelId']))
+        && (op.kind == 'reversal' || d.readingMilli >= resource.data.readingMilli);
     }
     match /sites/{site}/operations/{id} {
       allow get: if member(site) && (!exists(/databases/$(database)/documents/sites/$(site)/operations/$(id)) || manager(site) || resource.data.createdBy == request.auth.uid);
       allow list: if member(site) && (manager(site) || resource.data.createdBy == request.auth.uid);
-      allow create: if member(site) && validOperation(site, id);
+      allow create: if member(site) && (request.resource.data.get('schema',1) == 2 ? validV2(site,id) : validOperation(site, id));
       allow update, delete: if false;
     }
     function validOperation(site, id) {
@@ -81,12 +106,14 @@ service cloud.firestore {
       let before = get(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
       let after = getAfter(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
       return id.size() == 36
+        && !existsAfter(/databases/$(database)/documents/sites/$(site)/resolutions/$(id))
         && d.keys().hasOnly(['kind','tankId','assetId','product','quantityMl','readingMilli','reference','note','createdBy','createdAt'])
         && d.kind in ['receipt','fuel'] && text(d.tankId,100) && text(d.assetId,40)
         && positive(d.quantityMl) && d.readingMilli is int && d.readingMilli >= 0 && d.readingMilli <= 1000000000000
         && text(d.reference,120) && text(d.note,500)
         && d.createdBy == request.auth.uid && d.createdAt == request.time
         && before.active == true && d.product == before.product
+        && before.get('closedThrough','') == ''
         && after.lastOperationId == id && after.version == before.version + 1
         && after.balanceMl == before.balanceMl + (d.kind == 'receipt' ? d.quantityMl : -d.quantityMl)
         && after.balanceMl >= 0 && after.balanceMl <= before.capacityMl
@@ -97,8 +124,175 @@ service cloud.firestore {
       let before = get(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
       let after = getAfter(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
       return before.active == true && before.product == d.product
+        && !('lastFuelId' in before)
         && d.quantityMl <= before.capacityMl && d.readingMilli >= before.readingMilli
         && after.lastOperationId == id && after.version == before.version + 1 && after.readingMilli == d.readingMilli;
+    }
+    function movement(d,id) {
+      let k = d.kind == 'reversal' ? d.originalKind : d.kind;
+      let sign = d.kind == 'reversal' ? -1 : 1;
+      return sign * (k == 'transfer' ? (d.tankId == id ? -d.quantityMl : d.quantityMl) : (k == 'fuel' ? -d.quantityMl : d.quantityMl));
+    }
+    function coupledTank(site,id,opId,d) {
+      let b = get(/databases/$(database)/documents/sites/$(site)/tanks/$(id)).data;
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/tanks/$(id)).data;
+      return b.active && b.product == d.product && d.businessDate > b.get('closedThrough','')
+        && a.lastOperationId == opId && a.version == b.version + 1
+        && a.balanceMl == b.balanceMl + movement(d,id) && a.balanceMl >= 0 && a.balanceMl <= b.capacityMl;
+    }
+    function validV2(site,id) {
+      let d = request.resource.data;
+      return id.size() == 36 && d.keys().hasOnly(['schema','kind','tankId','destinationTankId','assetId','driverId','quantityMl','readingMilli','unitPriceMicros','reference','note','capturedAtMs','reverses','businessDate','totalCents','product','originalKind','previousReadingMilli','restoredReadingMilli','createdBy','createdAt','corrects','previousAssetOperationId'])
+        && !existsAfter(/databases/$(database)/documents/sites/$(site)/resolutions/$(id))
+        && text(d.corrects,100) && (d.corrects == '' || (manager(site) && getAfter(/databases/$(database)/documents/sites/$(site)/resolutions/$(d.corrects)).data.operationId == id))
+        && d.schema == 2 && d.kind in ['fuel','receipt','opening','transfer','reversal']
+        && text(d.tankId,100) && text(d.destinationTankId,100) && text(d.assetId,40) && text(d.driverId,100)
+        && text(d.reference,120) && text(d.note,500) && positive(d.quantityMl)
+        && d.readingMilli is int && d.readingMilli >= 0 && d.readingMilli <= 1000000000000
+        && d.unitPriceMicros is int && d.unitPriceMicros >= 0 && d.unitPriceMicros <= 1000000000
+        && d.totalCents == int((d.quantityMl * d.unitPriceMicros + 5000000) / 10000000)
+        && d.capturedAtMs is int && d.capturedAtMs >= request.time.toMillis() - 2592000000 && d.capturedAtMs <= request.time.toMillis() + 300000
+        && d.businessDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && timestamp.date(int(d.businessDate.split('-')[0]),int(d.businessDate.split('-')[1]),int(d.businessDate.split('-')[2])).toMillis() <= d.capturedAtMs - 10800000
+        && timestamp.date(int(d.businessDate.split('-')[0]),int(d.businessDate.split('-')[1]),int(d.businessDate.split('-')[2])).toMillis() > d.capturedAtMs - 10800000 - 86400000
+        && d.createdBy == request.auth.uid && d.createdAt == request.time && coupledTank(site,d.tankId,id,d)
+        && (d.kind == 'reversal' ? validReversal(site,id,d) : (d.reverses == '' && d.originalKind == '' && d.restoredReadingMilli == 0 && validNew(site,id,d)));
+    }
+    function validNew(site,id,d) {
+      let tank = get(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
+      return (d.kind == 'fuel' && d.destinationTankId == '' && fuelV2(site,id,d))
+        || (manager(site) && d.reference.size() > 0 && d.assetId == '' && d.driverId == '' && d.readingMilli == 0 && d.previousReadingMilli == 0 && d.previousAssetOperationId == ''
+          && ((d.kind == 'receipt' && d.destinationTankId == '')
+            || (d.kind == 'opening' && admin(site) && tank.version == 0 && tank.balanceMl == 0 && d.destinationTankId == '')
+            || (d.kind == 'transfer' && d.destinationTankId != d.tankId && coupledTank(site,d.destinationTankId,id,d))));
+    }
+    function fuelV2(site,id,d) {
+      let b = get(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
+      let cap = b.get('capacities',{}).get(d.product,b.product == d.product ? b.capacityMl : 0);
+      return b.active && d.quantityMl <= cap && cap > 0 && d.readingMilli >= b.readingMilli && d.previousReadingMilli == b.readingMilli
+        && d.previousAssetOperationId == b.get('lastFuelId',b.lastOperationId) && a.lastFuelId == id
+        && a.readingMilli == d.readingMilli && a.lastOperationId == id && a.version == b.version + 1
+        && (d.driverId == '' || get(/databases/$(database)/documents/sites/$(site)/drivers/$(d.driverId)).data.active == true);
+    }
+    function validReversal(site,id,d) {
+      let o = get(/databases/$(database)/documents/sites/$(site)/operations/$(d.reverses)).data;
+      let marker = getAfter(/databases/$(database)/documents/sites/$(site)/reversals/$(d.reverses)).data;
+      return manager(site) && d.reference.size() > 0 && o.schema == 2 && o.kind != 'reversal'
+        && !exists(/databases/$(database)/documents/sites/$(site)/reversals/$(d.reverses)) && marker.operationId == id
+        && d.originalKind == o.kind && d.tankId == o.tankId && d.destinationTankId == o.destinationTankId && d.assetId == o.assetId && d.driverId == o.driverId
+        && d.quantityMl == o.quantityMl && d.unitPriceMicros == o.unitPriceMicros && d.readingMilli == o.readingMilli && d.restoredReadingMilli == o.previousReadingMilli
+        && (o.kind != 'transfer' || coupledTank(site,d.destinationTankId,id,d))
+        && (o.kind == 'fuel' ? reverseAsset(site,id,d) : (d.previousReadingMilli == 0 && d.previousAssetOperationId == ''));
+    }
+    function reverseAsset(site,id,d) {
+      let b = get(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/assets/$(d.assetId)).data;
+      let o = get(/databases/$(database)/documents/sites/$(site)/operations/$(d.reverses)).data;
+      return b.get('lastFuelId',b.lastOperationId) == d.reverses && d.previousAssetOperationId == d.reverses && d.previousReadingMilli == b.readingMilli && a.lastFuelId == o.previousAssetOperationId
+        && a.lastOperationId == id && a.version == b.version + 1 && a.readingMilli == d.restoredReadingMilli;
+    }
+    match /sites/{site}/reversals/{id} {
+      allow read: if member(site);
+      allow create: if manager(site) && request.resource.data.keys().hasOnly(['operationId','createdBy','createdAt','reason'])
+        && newOperation(site,request.resource.data.operationId)
+        && getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(request.resource.data.operationId)).data.reverses == id
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid && text(request.resource.data.reason,120);
+    }
+    function auditPair(site,group,id,before,after) {
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/audits/$(after.auditId)).data;
+      return !exists(/databases/$(database)/documents/sites/$(site)/audits/$(after.auditId))
+        && a.group == group && a.subjectId == id && a.before == before && a.after == after && a.createdBy == request.auth.uid && a.createdAt == request.time && a.reason.size() > 0;
+    }
+    function catalogEdit(site,group,id) {
+      let d = request.resource.data;
+      return admin(site) && d.active is bool && text(d.name,100) && d.name.size() > 0 && d.updatedAt == request.time
+        && d.diff(resource.data).affectedKeys().hasOnly(group == 'tanks' ? ['name','active','minimumMl','updatedAt','auditId'] : ['name','plate','active','type','model','owner','ownership','capacities','updatedAt','auditId'])
+        && (group == 'tanks' ? (d.get('minimumMl',0) is int && d.get('minimumMl',0) >= 0 && d.get('minimumMl',0) <= d.capacityMl) : assetExtras(d))
+        && auditPair(site,group,id,resource.data,d);
+    }
+    function assetExtras(d) {
+      let c = d.get('capacities',{});
+      return text(d.get('plate',''),20) && text(d.get('type',''),60) && text(d.get('model',''),100) && text(d.get('owner',''),100)
+        && d.get('ownership','own') in ['own','third'] && c is map && c.keys().hasOnly(['diesel-s10','diesel-s500','arla32'])
+        && c.get('diesel-s10',0) is int && c.get('diesel-s10',0) >= 0 && c.get('diesel-s10',0) <= 1000000000
+        && c.get('diesel-s500',0) is int && c.get('diesel-s500',0) >= 0 && c.get('diesel-s500',0) <= 1000000000
+        && c.get('arla32',0) is int && c.get('arla32',0) >= 0 && c.get('arla32',0) <= 1000000000;
+    }
+    match /sites/{site}/drivers/{id} {
+      allow read: if member(site);
+      allow create, update: if admin(site) && request.resource.data.keys().hasOnly(['name','code','active','createdAt','updatedAt','auditId'])
+        && text(request.resource.data.name,100) && request.resource.data.name.size() > 0 && text(request.resource.data.code,40) && request.resource.data.active is bool
+        && request.resource.data.updatedAt == request.time
+        && (resource == null ? request.resource.data.createdAt == request.time : request.resource.data.createdAt == resource.data.createdAt)
+        && auditPair(site,'drivers',id,resource == null ? {} : resource.data,request.resource.data);
+    }
+    match /sites/{site}/audits/{id} {
+      allow read: if manager(site);
+      allow create: if manager(site) && request.resource.data.keys().hasOnly(['group','subjectId','before','after','reason','createdBy','createdAt'])
+        && request.resource.data.group in ['drivers','tanks','assets','reviews'] && text(request.resource.data.reason,500) && request.resource.data.reason.size() > 0
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/sites/$(site)/$(request.resource.data.group)/$(request.resource.data.subjectId)).data.auditId == id;
+    }
+    match /sites/{site}/reviews/{id} {
+      allow read: if member(site);
+      allow create, update: if manager(site) && request.resource.data.keys().hasOnly(['status','reason','createdBy','updatedAt','auditId'])
+        && request.resource.data.status in ['registrado','validado','pendente'] && text(request.resource.data.reason,500)
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/sites/$(site)/operations/$(id))
+        && auditPair(site,'reviews',id,resource == null ? {} : resource.data,request.resource.data);
+    }
+    match /sites/{site}/attachments/{id} {
+      allow get: if member(site) && (manager(site) || get(/databases/$(database)/documents/sites/$(site)/operations/$(id)).data.createdBy == request.auth.uid);
+      allow create: if member(site) && request.resource.data.keys().hasOnly(['dataUrl','createdBy','operationId','createdAt'])
+        && get(/databases/$(database)/documents/sites/$(site)/operations/$(id)).data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.operationId == id && request.resource.data.createdAt == request.time
+        && text(request.resource.data.dataUrl,160000) && request.resource.data.dataUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$');
+    }
+    match /sites/{site}/pending/{id} {
+      allow get: if member(site) && (!exists(/databases/$(database)/documents/sites/$(site)/pending/$(id)) || manager(site) || resource.data.createdBy == request.auth.uid);
+      allow list: if member(site) && (manager(site) || resource.data.createdBy == request.auth.uid);
+      allow create, update: if member(site) && request.resource.data.keys().hasOnly(['createdBy','payload','error','status','updatedAt'])
+        && request.resource.data.createdBy == request.auth.uid && (resource == null || resource.data.createdBy == request.auth.uid)
+        && request.resource.data.payload is map && request.resource.data.payload.size() <= 24
+        && (resource == null || request.resource.data.payload == resource.data.payload)
+        && text(request.resource.data.error,2000) && request.resource.data.status == 'pendente' && request.resource.data.updatedAt == request.time;
+    }
+    match /sites/{site}/resolutions/{id} {
+      allow get: if member(site) && (!exists(/databases/$(database)/documents/sites/$(site)/resolutions/$(id)) || manager(site) || resource.data.originalCreatedBy == request.auth.uid);
+      allow list: if member(site) && (manager(site) || resource.data.originalCreatedBy == request.auth.uid);
+      allow create: if manager(site) && validResolution(site,id);
+    }
+    function validResolution(site,id) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['outcome','operationId','originalCreatedBy','reason','createdBy','createdAt'])
+        && d.originalCreatedBy == get(/databases/$(database)/documents/sites/$(site)/pending/$(id)).data.createdBy
+        && !existsAfter(/databases/$(database)/documents/sites/$(site)/operations/$(id))
+        && d.createdBy == request.auth.uid && d.createdAt == request.time && text(d.reason,500) && d.reason.size() > 0
+        && ((d.outcome == 'dismissed' && d.operationId == '') || (d.outcome == 'corrected' && newOperation(site,d.operationId) && getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(d.operationId)).data.corrects == id));
+    }
+    function closeMovement(site,id) {
+      let d = request.resource.data;
+      let c = getAfter(/databases/$(database)/documents/sites/$(site)/closures/$(d.closureId)).data;
+      return manager(site) && d.diff(resource.data).affectedKeys().hasOnly(['closedThrough','closureId','updatedAt']) && d.updatedAt == request.time
+        && !exists(/databases/$(database)/documents/sites/$(site)/closures/$(d.closureId)) && c.tankId == id && c.day == d.closedThrough && d.closedThrough > resource.data.get('closedThrough','');
+    }
+    match /sites/{site}/closures/{id} {
+      allow read: if manager(site);
+      allow create: if manager(site) && validClosure(site,id);
+    }
+    function validClosure(site,id) {
+      let d = request.resource.data;
+      let t = get(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
+      return d.keys().hasOnly(['tankId','day','openingMl','inMl','outMl','balanceMl','physicalMl','differenceMl','status','reason','createdBy','createdAt','version'])
+        && d.createdBy == request.auth.uid && d.createdAt == request.time && d.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && timestamp.date(int(d.day.split('-')[0]),int(d.day.split('-')[1]),int(d.day.split('-')[2])).toMillis() <= request.time.toMillis() - 10800000
+        && timestamp.date(int(d.day.split('-')[0]),int(d.day.split('-')[1]),int(d.day.split('-')[2])).toMillis() > request.time.toMillis() - 10800000 - 86400000
+        && a.closedThrough == d.day && a.closureId == id && d.balanceMl == t.balanceMl && d.version == t.version
+        && d.physicalMl is int && d.physicalMl >= 0 && d.physicalMl <= t.capacityMl && d.differenceMl == d.physicalMl - d.balanceMl
+        && d.openingMl is int && d.inMl is int && d.inMl >= 0 && d.outMl is int && d.outMl >= 0 && d.balanceMl == d.openingMl + d.inMl - d.outMl
+        && d.status == (d.differenceMl == 0 ? 'OK' : 'DIVERGENCIA') && text(d.reason,500) && (d.differenceMl == 0 || d.reason.size() > 0);
     }
     match /{document=**} { allow read, write: if false; }
   }

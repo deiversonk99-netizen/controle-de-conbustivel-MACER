@@ -1,0 +1,10 @@
+{
+  "name": "MACER · Controle de combustível",
+  "short_name": "MACER",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f6f3",
+  "theme_color": "#123d32",
+  "lang": "pt-BR",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -4,9 +4,11 @@ Aplicativo próprio em React, TypeScript, Firebase Authentication e Cloud Firest
 
 ## Estado atual
 
-Implementados: login/logout, perfis por unidade, cadastro de ativos e tanques pelo administrador, recebimento pelo responsável, abastecimento pelo comboísta, estoque por tanque e histórico recente. Transações gravam movimento, saldo e leitura juntos. Regras Firestore verificam o mesmo vínculo no servidor. Reenvio com o mesmo UUID não duplica a baixa; envio sem confirmação fica recuperável no aparelho.
+Implementados nesta versão: login/logout, perfis por unidade, cadastro e inativação de motoristas/ativos/tanques, usuários por unidade, recebimentos, abastecimentos, transferências, saldo inicial, estorno, fechamento diário, pendências com correção auditada, foto opcional, preço/total, histórico paginado, competência 21–20 e exportação CSV para Excel. Transações e regras Firestore preservam estoque e leitura; reenvio com o mesmo UUID não duplica a baixa.
 
-Ainda não implementados: transferência, estorno, fechamento diário, importação histórica, fotos, valorização financeira e operação offline. Nesta etapa cada ativo tem um produto e medidor; múltiplos produtos/medidores por ativo serão incorporados antes da migração da frota. Cadastros não possuem edição/inativação pela interface ainda. Consultas carregam até 200 ativos/tanques e as últimas 50 operações, limites informados na tela. A regra de competência 21–20 existe com testes, mas relatórios por competência ainda não foram implementados. Esta versão precisa de homologação antes do uso real.
+Uso offline por PWA e IndexedDB: primeiro acesso online, sessão e cadastros preparados; lançamentos permanecem no aparelho e são revalidados ao reconectar. A confirmação do servidor é distinta do salvamento local. A atualização requer publicação coordenada das novas regras antes do cliente. Veja [guia da versão, limitações e implantação](docs/operacao-v2.md) e [conferência de escopo](docs/escopo-conferencia.md).
+
+A importação da base histórica não é automática: duplicidades, capacidades, leituras e saldos físicos precisam ser conferidos. As melhorias futuras do PDF (QR, fotos obrigatórias, dashboard avançado, análise h/km e SAP) não fazem parte desta implantação. A homologação deve ocorrer antes de liberar unidades reais.
 
 ## Executar
 
