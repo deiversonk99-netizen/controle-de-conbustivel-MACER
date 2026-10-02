@@ -23,7 +23,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow get: if request.auth != null && (request.auth.uid == uid || (profileAdmin() && (!exists(/databases/$(database)/documents/users/$(uid)) || scopedProfile(resource.data))));
       allow list: if profileAdmin() && scopedProfile(resource.data);
-      allow create, update: if profileAdmin() && uid != request.auth.uid && validProfile(uid);
+      allow create, update: if (profileAdmin() && uid != request.auth.uid && validProfile(uid)) || (uid == request.auth.uid && ownerUnitGrant(uid));
       allow delete: if false;
     }
     function profileAdmin() { return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
@@ -55,7 +55,7 @@ service cloud.firestore {
         && request.resource.data.balanceMl == 0 && request.resource.data.active == true
         && request.resource.data.version == 0 && request.resource.data.lastOperationId == ''
         && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
-      allow update: if member(site) && (tankMovement(site, id) || catalogEdit(site,'tanks',id) || closeMovement(site,id));
+      allow update: if member(site) && (tankMovement(site, id) || catalogEdit(site,'tanks',id) || closeMovement(site,id) || zeroOpening(site,id));
       allow delete: if false;
     }
     function tankMovement(site, id) {
@@ -142,7 +142,8 @@ service cloud.firestore {
     }
     function validV2(site,id) {
       let d = request.resource.data;
-      return id.size() == 36 && d.keys().hasOnly(['schema','kind','tankId','destinationTankId','assetId','driverId','quantityMl','readingMilli','unitPriceMicros','reference','note','capturedAtMs','reverses','businessDate','totalCents','product','originalKind','previousReadingMilli','restoredReadingMilli','createdBy','createdAt','corrects','previousAssetOperationId'])
+      return id.size() == 36 && d.keys().hasOnly(['schema','kind','tankId','destinationTankId','assetId','driverId','quantityMl','readingMilli','unitPriceMicros','reference','note','capturedAtMs','reverses','businessDate','totalCents','product','originalKind','previousReadingMilli','restoredReadingMilli','createdBy','createdAt','corrects','previousAssetOperationId','measurementId'])
+        && (d.get('measurementId','') == '' || (d.kind == 'opening' && measuredOpening(site,id,d)))
         && !existsAfter(/databases/$(database)/documents/sites/$(site)/resolutions/$(id))
         && text(d.corrects,100) && (d.corrects == '' || (manager(site) && getAfter(/databases/$(database)/documents/sites/$(site)/resolutions/$(d.corrects)).data.operationId == id))
         && d.schema == 2 && d.kind in ['fuel','receipt','opening','transfer','reversal']
@@ -332,6 +333,106 @@ service cloud.firestore {
         && d.importedBy == request.auth.uid && d.importedAt == request.time;
     }
     function archivedIssue(issues,i) { return issues.size() <= i || text(issues[i],500); }
+    function unitCreator() { return profileAdmin() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('canCreateSites',false) == true; }
+    function ownerUnitGrant(uid) {
+      let d = request.resource.data;
+      let site = d.get('unitGrantId','');
+      return unitCreator() && d.diff(resource.data).affectedKeys().hasOnly(['siteIds','unitGrantId','updatedAt'])
+        && site is string && site.matches('^[a-z0-9][a-z0-9-]{1,59}$') && !(site in resource.data.siteIds)
+        && d.siteIds == resource.data.siteIds.concat([site]) && d.siteIds.size() <= 100 && d.updatedAt == request.time
+        && !exists(/databases/$(database)/documents/sites/$(site))
+        && getAfter(/databases/$(database)/documents/sites/$(site)).data.ownerUid == uid
+        && getAfter(/databases/$(database)/documents/sites/$(site)).data.createdBy == uid
+        && getAfter(/databases/$(database)/documents/sites/$(site)).data.createdAt == request.time;
+    }
+    match /sites/{site} {
+      allow get: if member(site) || (unitCreator() && !exists(/databases/$(database)/documents/sites/$(site)));
+      allow create: if (admin(site) || (unitCreator() && site in getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteIds))
+        && site.matches('^[a-z0-9][a-z0-9-]{1,59}$') && validUnit(request.resource.data)
+        && request.resource.data.ownerUid == request.auth.uid && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time && unitAudit(site,{},request.resource.data);
+      allow update: if admin(site) && validUnit(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','crs','responsibleName','responsibleEmail','checks','updatedAt','auditId'])
+        && unitAudit(site,resource.data,request.resource.data);
+      allow delete: if false;
+    }
+    function crItem(crs,i) { return crs.size() <= i || (crs[i] is string && crs[i].matches('^[A-Z0-9-]{1,40}$')); }
+    function validUnit(d) {
+      return d.keys().hasAll(['name','crs','responsibleName','responsibleEmail','checks','ownerUid','createdBy','createdAt','updatedAt','auditId'])
+        && d.keys().hasOnly(['name','crs','responsibleName','responsibleEmail','checks','ownerUid','createdBy','createdAt','updatedAt','auditId'])
+        && text(d.name,100) && d.name.size() > 0 && text(d.responsibleName,100) && d.responsibleName.size() > 0
+        && text(d.responsibleEmail,254) && d.responsibleEmail.matches('^[^ @]+@[^ @]+[.][^ @]+$')
+        && d.crs is list && d.crs.size() > 0 && d.crs.size() <= 20 && d.crs.toSet().size() == d.crs.size()
+        && crItem(d.crs,0) && crItem(d.crs,1) && crItem(d.crs,2) && crItem(d.crs,3) && crItem(d.crs,4)
+        && crItem(d.crs,5) && crItem(d.crs,6) && crItem(d.crs,7) && crItem(d.crs,8) && crItem(d.crs,9)
+        && crItem(d.crs,10) && crItem(d.crs,11) && crItem(d.crs,12) && crItem(d.crs,13) && crItem(d.crs,14)
+        && crItem(d.crs,15) && crItem(d.crs,16) && crItem(d.crs,17) && crItem(d.crs,18) && crItem(d.crs,19)
+        && d.checks is map && d.checks.keys().hasAll(['assets','drivers','users']) && d.checks.keys().hasOnly(['assets','drivers','users'])
+        && d.checks.assets is bool && d.checks.drivers is bool && d.checks.users is bool && d.updatedAt == request.time;
+    }
+    function unitAudit(site,before,after) {
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/unitAudits/$(after.auditId)).data;
+      return !exists(/databases/$(database)/documents/sites/$(site)/unitAudits/$(after.auditId))
+        && a.before == before && a.after == after && a.createdBy == request.auth.uid && a.createdAt == request.time;
+    }
+    match /sites/{site}/unitAudits/{id} {
+      allow read: if admin(site);
+      allow create: if (admin(site) || (unitCreator() && site in getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteIds)) && request.resource.data.keys().hasOnly(['before','after','reason','createdBy','createdAt'])
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+        && text(request.resource.data.reason,500) && request.resource.data.reason.size() > 0
+        && getAfter(/databases/$(database)/documents/sites/$(site)).data.auditId == id
+        && getAfter(/databases/$(database)/documents/sites/$(site)).data == request.resource.data.after;
+    }
+    match /sites/{site}/measurements/{id} {
+      allow read: if manager(site);
+      allow create: if admin(site) && validMeasurement(site,id);
+      allow update, delete: if false;
+    }
+    function validMeasurement(site,id) {
+      let d = request.resource.data;
+      let t = get(/databases/$(database)/documents/sites/$(site)/tanks/$(d.tankId)).data;
+      return id.matches('^[a-f0-9-]{36}$') && d.keys().hasAll(['tankId','physicalMl','measuredAtMs','measuredByName','reference','noMovementsSince','capacityMl','product','tankVersion','createdBy','createdAt'])
+        && d.keys().hasOnly(['tankId','physicalMl','measuredAtMs','measuredByName','reference','noMovementsSince','capacityMl','product','tankVersion','createdBy','createdAt'])
+        && t.active && d.physicalMl is int && d.physicalMl >= 0 && d.physicalMl <= t.capacityMl && d.capacityMl == t.capacityMl
+        && d.product == t.product && d.tankVersion == t.version && d.noMovementsSince is bool
+        && d.measuredAtMs is int && d.measuredAtMs <= request.time.toMillis() + 300000 && d.measuredAtMs >= request.time.toMillis() - 2592000000
+        && text(d.measuredByName,100) && d.measuredByName.size() > 0 && text(d.reference,120) && d.reference.size() > 0
+        && d.createdBy == request.auth.uid && d.createdAt == request.time;
+    }
+    function measuredOpening(site,id,d) {
+      let m = get(/databases/$(database)/documents/sites/$(site)/measurements/$(d.measurementId)).data;
+      let mark = getAfter(/databases/$(database)/documents/sites/$(site)/openingMeasurements/$(d.measurementId)).data;
+      return admin(site) && m.tankId == d.tankId && m.physicalMl == d.quantityMl && m.tankVersion == 0 && m.noMovementsSince
+        && !exists(/databases/$(database)/documents/sites/$(site)/openingMeasurements/$(d.measurementId)) && mark.operationId == id && mark.tankId == d.tankId;
+    }
+    match /sites/{site}/openingMeasurements/{id} {
+      allow read: if manager(site);
+      allow create: if admin(site) && openingMeasurementMarker(site,id);
+      allow update, delete: if false;
+    }
+    function openingMeasurementMarker(site,id) {
+      let d = request.resource.data;
+      let m = get(/databases/$(database)/documents/sites/$(site)/measurements/$(id)).data;
+      let t = get(/databases/$(database)/documents/sites/$(site)/tanks/$(m.tankId)).data;
+      return d.keys().hasOnly(['operationId','tankId','createdBy','createdAt']) && d.tankId == m.tankId
+        && d.createdBy == request.auth.uid && d.createdAt == request.time && t.active && t.version == 0 && t.balanceMl == 0
+        && m.tankVersion == 0 && m.noMovementsSince
+        && (m.physicalMl == 0 ? (d.operationId == '' && zeroOpening(site,m.tankId)) : (newOperation(site,d.operationId)
+          && getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(d.operationId)).data.measurementId == id
+          && getAfter(/databases/$(database)/documents/sites/$(site)/operations/$(d.operationId)).data.kind == 'opening'));
+    }
+    function zeroOpening(site,id) {
+      let b = get(/databases/$(database)/documents/sites/$(site)/tanks/$(id)).data;
+      let a = getAfter(/databases/$(database)/documents/sites/$(site)/tanks/$(id)).data;
+      let m = get(/databases/$(database)/documents/sites/$(site)/measurements/$(a.lastOperationId)).data;
+      let mark = getAfter(/databases/$(database)/documents/sites/$(site)/openingMeasurements/$(a.lastOperationId)).data;
+      return admin(site) && b.active && b.version == 0 && b.balanceMl == 0
+        && a.diff(b).affectedKeys().hasOnly(['version','lastOperationId','updatedAt'])
+        && a.version == 1 && a.updatedAt == request.time
+        && m.tankId == id && m.tankVersion == 0 && m.physicalMl == 0 && m.noMovementsSince
+        && !exists(/databases/$(database)/documents/sites/$(site)/openingMeasurements/$(a.lastOperationId))
+        && mark.tankId == id && mark.operationId == '' && mark.createdBy == request.auth.uid && mark.createdAt == request.time;
+    }
     match /{document=**} { allow read, write: if false; }
   }
 }

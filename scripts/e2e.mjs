@@ -73,6 +73,7 @@ try {
       role: 'admin',
       active: true,
       siteIds: ['e2e'],
+      canCreateSites: true,
     });
     await setDoc(doc(db, 'sites', 'e2e', 'tanks', 'T1'), {
       name: 'Tanque E2E',
@@ -284,6 +285,60 @@ try {
   );
   await page.screenshot({ path: 'test-results/mobile-archive-offline.png', fullPage: true });
   await context.setOffline(false);
+  // Preparation happens entirely in the mobile app, including the protected new-unit grant.
+  await page.getByRole('button', { name: 'Preparar unidade', exact: true }).click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Cadastrar nova unidade', exact: true }).click();
+  await page.getByLabel('Nome da unidade / obra').fill('Obra fictícia de teste');
+  await page.getByLabel('CRs da unidade (separados por vírgula)').fill('MC102, MC103');
+  await page.getByLabel('Nome do responsável').fill('Responsável E2E');
+  await page.getByLabel('E-mail do responsável').fill('responsavel-e2e@example.com');
+  await page.getByRole('button', { name: 'Criar unidade', exact: true }).click();
+  await expect(page.getByText(/Unidade cadastrada. Selecione/)).toBeVisible({ timeout: 30000 });
+  await page.getByLabel(/^Unidade/).selectOption('mc102');
+  await page.getByRole('button', { name: 'Preparar unidade', exact: true }).click();
+  await expect(page.getByLabel('Nome da unidade / obra')).toHaveValue('Obra fictícia de teste');
+  await page.getByLabel('Nome', { exact: true }).fill('Tanque de abertura E2E');
+  await page.getByLabel('Capacidade (litros)', { exact: true }).fill('5000');
+  await page.getByLabel('Alerta abaixo de (litros)', { exact: true }).fill('100');
+  await page
+    .getByLabel('Motivo do cadastro / alteração', { exact: true })
+    .fill('Preparação inicial');
+  await page.getByRole('button', { name: 'Cadastrar', exact: true }).click();
+  await expect(
+    page.getByRole('cell', { name: 'Tanque de abertura E2E', exact: true }),
+  ).toBeVisible();
+  await page.getByLabel('Tanque medido').selectOption({ label: 'Tanque de abertura E2E' });
+  await page.getByLabel('Saldo físico medido (litros)').fill('100');
+  const localTime = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 16);
+  await page.getByLabel('Data e hora da medição (Brasília)').fill(localTime);
+  await page.getByLabel('Quem realizou a medição').fill('Conferente E2E');
+  await page.getByLabel('Referência / método da medição').fill('Régua aferida');
+  await page.getByLabel(/Confirmei que não houve entradas/).check();
+  await page.getByRole('button', { name: 'Salvar medição física', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Definir saldo inicial', exact: true }),
+  ).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Definir saldo inicial', exact: true }).click();
+  await expect(
+    page.getByRole('cell', { name: 'Saldo inicial conferido', exact: true }),
+  ).toBeVisible();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    expect((await getDoc(doc(db, 'sites', 'mc102'))).data().responsibleName).toBe(
+      'Responsável E2E',
+    );
+    const { getDocs, collection } = await import('firebase/firestore');
+    const tanks = await getDocs(collection(db, 'sites', 'mc102', 'tanks'));
+    expect(tanks.docs[0].data().balanceMl).toBe(100000);
+    const measurements = await getDocs(collection(db, 'sites', 'mc102', 'measurements'));
+    expect(measurements.docs[0].data().measuredByName).toBe('Conferente E2E');
+  });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
+    false,
+  );
+  await page.screenshot({ path: 'test-results/mobile-unit-setup.png', fullPage: true });
   expect(errors).toEqual([]);
   console.log(
     'E2E PASS: mobile driver registration, local validation, review/correction, unsaved-form protection, durable offline queue, offline reload, automatic sync, exact single debit, server conflict preserved without stock change, responsive width and user provisioning.',

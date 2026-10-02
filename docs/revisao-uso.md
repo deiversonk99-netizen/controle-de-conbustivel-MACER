@@ -31,7 +31,9 @@ O aplicativo avisa ao tentar abandonar um abastecimento em preenchimento. Esse a
 
 ## Preparação da operação real
 
-O ambiente publicado contém a unidade de homologação e dados fictícios. Para iniciar operação real, o proprietário precisa informar unidades, responsáveis, veículos, capacidades, leituras iniciais e medição física de cada tanque. A capacidade de 5.000 L citada no PDF é configurável, não um saldo inicial presumido.
+O módulo **Preparar unidade** reúne o cadastro da unidade/CR e responsável, atalhos e confirmação de veículos/motoristas/usuários, capacidade dos tanques e medição física com data/hora, conferente e referência. A abertura é vinculada à medição; repetir a confirmação não duplica o saldo. O saldo zero encerra a preparação do tanque sem entrada fictícia. A capacidade de 5.000 L citada no PDF é configurável, não um saldo inicial presumido. Dados reais são informados e conferidos pela empresa dentro do aplicativo.
+
+Novas unidades exigem conta pessoal habilitada como administrador principal pelo proprietário do Firebase. A conta de teste não tem essa capacidade. Publicar as regras correspondentes antes de usar a preparação; a habilitação da conta principal é uma configuração inicial protegida.
 
 A planilha histórica exige conferência de duplicidades de código e leituras divergentes antes de importação. O processo está descrito em [Implantação conferida](implantacao-conferida.md). Não foram criados saldos operacionais com base em células não conferidas. O arquivo histórico é apenas consultável; não permite estornar movimentos antigos contra o estoque atual.
 

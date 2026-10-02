@@ -12,7 +12,11 @@ O diretório `imports/` está fora do Git. Não publicar a planilha, o pacote ou
 
 ## Conferir a unidade e ativar cadastros
 
-O proprietário informa nome da unidade, administrador responsável e e-mail. O acesso inicial do administrador deve ser concedido pelo proprietário do projeto Firebase; um administrador não pode ampliar seu próprio perfil ou promover outros administradores pela aplicação.
+Todos os dados operacionais são preenchidos no módulo **Preparar unidade** do aplicativo: nome da unidade/obra, CRs, nome e e-mail do responsável, conferência dos cadastros e medição física dos tanques. Não é necessário encaminhar esses dados por conversa.
+
+A habilitação inicial de uma conta pessoal de administrador principal deve ser feita pelo proprietário do projeto Firebase. Somente essa conta recebe `canCreateSites: true`; a conta pública de teste permanece restrita a `homologacao`. O principal pode criar uma unidade nova no aplicativo e receber acesso apenas à unidade criada nessa mesma transação. Não pode acrescentar unidades existentes ao seu perfil nem promover outros administradores pelo app. O primeiro CR determina o código interno da unidade; os demais CRs são associados à mesma unidade. Nome e responsável podem ser atualizados com auditoria. Cadastrar o responsável não cria seu login: use **Usuários** para liberar um gestor ou operador.
+
+Em **Preparar unidade**, os atalhos levam aos veículos, motoristas e usuários. Depois da verificação presencial, marcar as três conferências e salvar. Essas marcações registram a declaração do administrador; não substituem a conferência dos dados pela empresa e não bloqueiam automaticamente a operação.
 
 No módulo **Implantação / planilha**, abrir o pacote, conferir as abas e selecionar os CRs originais dos registros que pertencem à unidade atual. Abas e CRs começam desmarcados. CR ausente ou com erro deve ser conferido na origem antes de seleção; a amostra é limitada às primeiras 100 linhas, e não substitui a conferência do arquivo completo. A unidade fictícia `homologacao` permite a prévia, mas bloqueia a importação de dados da empresa.
 
@@ -32,7 +36,11 @@ Entradas e saídas preservam sua classificação neutra, porque a planilha inclu
 
 ## Abrir a operação real
 
-Conferir cada tanque: nome, produto, capacidade, mínimo e medição física com data/hora. Cadastrar com saldo zero e registrar **Saldo inicial** somente com a medição validada e sua referência. Se não houver produto, confirmar expressamente saldo zero. O saldo de uma planilha antiga não substitui uma medição atual. A abertura não deve preceder a conferência de movimentos ocorridos entre medição e início de operação.
+Em **Preparar unidade**, cadastrar cada tanque com nome, produto, capacidade e mínimo. O cadastro começa com saldo zero. Informar saldo físico em litros, data/hora em Brasília, quem mediu e referência/método; a medição deve estar dentro dos últimos 30 dias e não pode exceder a capacidade. O registro é imutável e não altera o estoque por si só.
+
+Para um tanque novo, confirmar que não houve entradas/saídas posteriores à medição e tocar em **Definir saldo inicial**. A abertura usa exatamente a quantidade medida e fica vinculada à medição. Repetir o envio não repete a entrada; a transação impede uma segunda abertura. Saldo físico zero também exige confirmação e encerra a abertura sem criar um movimento de entrada fictício. Se a medição estiver errada, registrar outra; nunca editar o histórico. Se o tanque já tiver movimentos, usar **Fechamento** para conferir diferenças. O saldo de uma planilha antiga não substitui uma medição atual.
+
+A preparação requer internet. As informações já carregadas podem ser consultadas offline no mesmo aparelho/usuário/unidade. Abastecimentos continuam usando a fila offline; dados operacionais devem ser cadastrados e sincronizados antes do trabalho em campo.
 
 Depois de cadastrar veículos, motoristas, tanques e operadores: testar recebimento, abastecimento, fechamento e um lançamento offline controlado na unidade real. Todos os aparelhos devem sincronizar antes de fechar o dia. Registrar aprovação da empresa para início de operação.
 

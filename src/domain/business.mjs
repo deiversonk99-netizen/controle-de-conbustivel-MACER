@@ -31,6 +31,15 @@ export function normalizeCommand(raw) {
     reverses: raw.reverses || '',
   };
   c.corrects = raw.corrects || '';
+  if (raw.measurementId) {
+    if (
+      raw.kind !== 'opening' ||
+      typeof raw.measurementId !== 'string' ||
+      !/^[a-f0-9-]{36}$/.test(raw.measurementId)
+    )
+      throw Error('Medição de abertura inválida.');
+    c.measurementId = raw.measurementId;
+  }
   if (!['fuel', 'receipt', 'transfer', 'opening', 'reversal'].includes(c.kind))
     throw Error('Tipo inválido.');
   if (!Number.isSafeInteger(c.quantityMl) || c.quantityMl <= 0 || c.quantityMl > 1e9)
