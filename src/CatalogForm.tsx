@@ -11,6 +11,7 @@ export default function CatalogForm({
   uid,
   disabled,
   action,
+  preset,
 }: {
   group: string;
   rows: Row[];
@@ -18,6 +19,7 @@ export default function CatalogForm({
   uid: string;
   disabled: boolean;
   action: (work: () => Promise<unknown>, message?: string) => Promise<void>;
+  preset?: Row;
 }) {
   const [edit, setEdit] = useState<Row | null>(null);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -92,14 +94,19 @@ export default function CatalogForm({
                 <input
                   name="code"
                   maxLength={40}
-                  defaultValue={edit?.code || ''}
+                  defaultValue={edit?.code || preset?.code || ''}
                   required={group === 'assets'}
                   disabled={group === 'assets' && !!edit}
                 />
               </Field>
             )}
             <Field label="Nome">
-              <input name="name" maxLength={100} required defaultValue={edit?.name || ''} />
+              <input
+                name="name"
+                maxLength={100}
+                required
+                defaultValue={edit?.name || preset?.name || ''}
+              />
             </Field>
             <Field label="Situação">
               <select name="active" defaultValue={String(edit?.active ?? true)}>
@@ -112,16 +119,32 @@ export default function CatalogForm({
             {group === 'assets' && (
               <>
                 <Field label="Placa">
-                  <input name="plate" maxLength={20} defaultValue={edit?.plate || ''} />
+                  <input
+                    name="plate"
+                    maxLength={20}
+                    defaultValue={edit?.plate || preset?.plate || ''}
+                  />
                 </Field>
                 <Field label="Tipo">
-                  <input name="type" maxLength={60} defaultValue={edit?.type || ''} />
+                  <input
+                    name="type"
+                    maxLength={60}
+                    defaultValue={edit?.type || preset?.type || ''}
+                  />
                 </Field>
                 <Field label="Modelo">
-                  <input name="model" maxLength={100} defaultValue={edit?.model || ''} />
+                  <input
+                    name="model"
+                    maxLength={100}
+                    defaultValue={edit?.model || preset?.model || ''}
+                  />
                 </Field>
                 <Field label="Proprietário">
-                  <input name="owner" maxLength={100} defaultValue={edit?.owner || ''} />
+                  <input
+                    name="owner"
+                    maxLength={100}
+                    defaultValue={edit?.owner || preset?.owner || ''}
+                  />
                 </Field>
                 <Field label="Locação">
                   <select name="ownership" defaultValue={edit?.ownership || 'own'}>
@@ -190,7 +213,7 @@ export default function CatalogForm({
                 name="reason"
                 required
                 maxLength={500}
-                defaultValue={edit ? '' : 'Cadastro inicial'}
+                defaultValue={edit ? '' : preset?.reason || 'Cadastro inicial'}
               />
             </Field>
           </div>
