@@ -301,7 +301,7 @@ export default function UnitSetup({
         </p>
         <fieldset disabled={!online || busy || !unit}>
           {(['assets', 'drivers', 'users'] as const).map((k) => (
-            <label key={k}>
+            <label className="setup-check" key={k}>
               <input
                 type="checkbox"
                 checked={checks[k]}
@@ -391,7 +391,7 @@ export default function UnitSetup({
                   : 'Tanque novo, sem movimentos.'}
               </p>
             )}
-            <label>
+            <label className="setup-check">
               <input name="noMovements" type="checkbox" /> Confirmei que não houve entradas ou
               saídas desde esta medição até a abertura do tanque novo.
             </label>

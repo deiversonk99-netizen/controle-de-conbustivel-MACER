@@ -351,6 +351,21 @@
 .quick-start {
   margin-bottom: 20px;
 }
+.workspace .setup-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  line-height: 1.6;
+}
+.workspace .setup-check input {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 24px;
+  accent-color: #17563e;
+}
 .workspace summary {
   cursor: pointer;
   min-height: 44px;
