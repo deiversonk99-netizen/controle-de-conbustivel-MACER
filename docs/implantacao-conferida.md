@@ -14,11 +14,11 @@ O diretório `imports/` está fora do Git. Não publicar a planilha, o pacote ou
 
 O proprietário informa nome da unidade, administrador responsável e e-mail. O acesso inicial do administrador deve ser concedido pelo proprietário do projeto Firebase; um administrador não pode ampliar seu próprio perfil ou promover outros administradores pela aplicação.
 
-No módulo **Implantação / planilha**, abrir o pacote, conferir as abas e selecionar somente as que pertencem à unidade atual. Nenhuma aba é selecionada automaticamente. A unidade fictícia `homologacao` permite a prévia, mas bloqueia a importação de dados da empresa.
+No módulo **Implantação / planilha**, abrir o pacote, conferir as abas e selecionar os CRs originais dos registros que pertencem à unidade atual. Abas e CRs começam desmarcados. CR ausente ou com erro deve ser conferido na origem antes de seleção; a amostra é limitada às primeiras 100 linhas, e não substitui a conferência do arquivo completo. A unidade fictícia `homologacao` permite a prévia, mas bloqueia a importação de dados da empresa.
 
 As propostas de veículos mostram unidade original, código, placa, modelo e problemas detectados. **Preparar cadastro** preenche dados conhecidos; o responsável deve confirmar código, unidade, propriedade, combustível, capacidade por produto, medidor e leitura inicial. Nenhum veículo é ativado automaticamente a partir do Excel. Resolver códigos repetidos antes de cadastrar. Reservatórios devem ser cadastrados como tanques, conforme sua função operacional; não converter todo destino da planilha em veículo.
 
-Motoristas são cadastrados separadamente dos usuários que fazem os lançamentos. A lista histórica de comboístas não autoriza criar contas ou tratar esses nomes como motoristas sem conferência.
+Motoristas são cadastrados separadamente dos usuários que fazem os lançamentos. A identificação da pessoa e o cabeçalho original da coluna ficam preservados: as abas de 2026 usam “MOT.” e as antigas usam “COMBOISTA”. Essa lista não autoriza criar contas ou atribuir papéis às pessoas sem conferência.
 
 ## Importar e consultar o histórico
 

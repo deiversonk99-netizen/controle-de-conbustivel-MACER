@@ -26,6 +26,7 @@ export default function Migration({
 }) {
   const [pkg, setPkg] = useState<Row | null>(null),
     [selected, setSelected] = useState<string[]>([]),
+    [selectedUnits, setSelectedUnits] = useState<string[]>([]),
     [approved, setApproved] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(''),
@@ -60,7 +61,7 @@ export default function Migration({
       (!source || r.sourceSheet === source) &&
       (!from || r.businessDate >= from) &&
       (!to || r.businessDate <= to) &&
-      `${r.assetId} ${r.operatorName} ${r.reference}`
+      `${r.assetId} ${r.personName} ${r.reference}`
         .toLocaleLowerCase('pt-BR')
         .includes(search.toLocaleLowerCase('pt-BR')),
   );
@@ -69,7 +70,18 @@ export default function Migration({
       .toLocaleLowerCase('pt-BR')
       .includes(search.toLocaleLowerCase('pt-BR')),
   );
+  const originalUnits = [
+    ...new Set<string>(
+      (pkg?.records || [])
+        .filter((r: Row) => selected.includes(r.sourceSheet))
+        .map((r: Row) => r.sourceUnit),
+    ),
+  ];
+  const chosenRows = (pkg?.records || []).filter(
+    (r: Row) => selected.includes(r.sourceSheet) && selectedUnits.includes(r.sourceUnit),
+  );
   async function loadFile(file?: File) {
+    setSelectedUnits([]);
     setPkg(null);
     setPreset(undefined);
     setApproved(false);
@@ -96,7 +108,7 @@ export default function Migration({
         await getDatabase(),
         site,
         uid,
-        pkg,
+        { ...pkg, records: chosenRows },
         selected,
         (p: Row) => {
           if (mounted.current)
@@ -230,14 +242,78 @@ export default function Migration({
                     </tbody>
                   </table>
                 </div>
+                <h4>CR original dos registros selecionados</h4>
+                <p>
+                  Selecione somente os CRs que pertencem à unidade atual. CR vazio ou com erro exige
+                  conferir as linhas na planilha antes de incluí-las.
+                </p>
+                {originalUnits.map((cr) => (
+                  <label key={cr}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Incluir CR ${cr || 'não informado'}`}
+                      checked={selectedUnits.includes(cr)}
+                      onChange={(e) => {
+                        setApproved(false);
+                        setSelectedUnits(
+                          e.target.checked
+                            ? [...selectedUnits, cr]
+                            : selectedUnits.filter((v) => v !== cr),
+                        );
+                      }}
+                    />{' '}
+                    {cr || 'Não informado na origem'} ·{' '}
+                    {
+                      pkg.records.filter(
+                        (r: Row) => selected.includes(r.sourceSheet) && r.sourceUnit === cr,
+                      ).length
+                    }{' '}
+                    registros
+                  </label>
+                ))}
+                <details>
+                  <summary>Ver amostra dos movimentos selecionados ({chosenRows.length})</summary>
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Origem</th>
+                          <th>CR</th>
+                          <th>Data</th>
+                          <th>Código</th>
+                          <th>Litros</th>
+                          <th>Avisos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {chosenRows.slice(0, 100).map((r: Row) => (
+                          <tr key={r.id}>
+                            <td>
+                              {r.sourceSheet}:{r.sourceRow}:{r.sourceColumn}
+                            </td>
+                            <td>{r.sourceUnit}</td>
+                            <td>{r.businessDate}</td>
+                            <td>{r.assetId}</td>
+                            <td>{formatMilli(r.quantityMl)}</td>
+                            <td>{r.issues.join(' ')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p>
+                    A amostra mostra as primeiras 100 linhas. Confira a planilha original antes de
+                    importar registros com CR ausente ou divergente.
+                  </p>
+                </details>
                 <label>
                   <input
                     type="checkbox"
                     checked={approved}
                     onChange={(e) => setApproved(e.target.checked)}
                   />{' '}
-                  Confirmei que todas as abas selecionadas pertencem à unidade {site}. Entendo que
-                  esta importação não define saldos físicos nem ativa cadastros.
+                  Confirmei que todos os registros selecionados pelas abas e CRs pertencem à unidade{' '}
+                  {site}. Entendo que esta importação não define saldos físicos nem ativa cadastros.
                 </label>
               </fieldset>
               {site === 'homologacao' && (
@@ -248,12 +324,11 @@ export default function Migration({
               )}
               <button
                 disabled={
-                  busy || !online || !approved || !selected.length || site === 'homologacao'
+                  busy || !online || !approved || !chosenRows.length || site === 'homologacao'
                 }
                 onClick={() => void importRows()}
               >
-                Importar histórico conferido (
-                {pkg.records.filter((r: Row) => selected.includes(r.sourceSheet)).length})
+                Importar histórico conferido ({chosenRows.length})
               </button>
               {busy && (
                 <button
@@ -344,7 +419,7 @@ export default function Migration({
       {loaded && (
         <>
           <div className="form-grid">
-            <Field label="Código, comboísta ou documento">
+            <Field label="Código, pessoa na origem ou documento">
               <input value={search} onChange={(e) => setSearch(e.target.value)} />
             </Field>
             <Field label="Aba de origem">
@@ -378,7 +453,9 @@ export default function Migration({
                     'Movimento original',
                     'Litros',
                     'Código / destino',
-                    'Comboísta original',
+                    'Pessoa na origem',
+                    'Cabeçalho da pessoa na origem',
+                    'CR original',
                     'Leitura original',
                     'Documento',
                     'Preço original',
@@ -395,7 +472,9 @@ export default function Migration({
                     r.kind === 'legacy-in' ? 'Entrada' : 'Saída',
                     formatMilli(r.quantityMl),
                     r.assetId,
-                    r.operatorName,
+                    r.personName,
+                    r.sourcePersonLabel,
+                    r.sourceUnit,
                     r.legacyReading,
                     r.reference,
                     r.unitPriceText,
@@ -439,8 +518,9 @@ export default function Migration({
                         <summary>Conferência</summary>
                         <p>{r.issues.join(' ') || 'Sem aviso na extração.'}</p>
                         <p>
-                          Comboísta original: {r.operatorName || 'Não informado'}. Documento:{' '}
-                          {r.reference || 'Não informado'}.
+                          Pessoa na origem ({r.sourcePersonLabel}):{' '}
+                          {r.personName || 'Não informado'}. CR: {r.sourceUnit || 'Não informado'}.
+                          Documento: {r.reference || 'Não informado'}.
                         </p>
                       </details>
                     </td>

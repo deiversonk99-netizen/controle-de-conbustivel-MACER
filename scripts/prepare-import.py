@@ -65,13 +65,15 @@ def prepare(path):
             for row, c, errors in sheet['rows']:
                 if row < (4 if sheet_name == 'CADASTRO' else 2) or not c.get('B'): continue
                 if sheet_name == 'CADASTRO':
-                    p = dict(code=c.get('B',''), unit=c.get('C',''), type=c.get('D',''), model=c.get('E',''), plate=c.get('F',''), owner=c.get('G',''), ownership=c.get('H',''), status=c.get('K',''), meterHint=c.get('L',''))
+                    p = dict(code=c.get('B',''), unit=c.get('C',''), type=c.get('D',''), model=c.get('E',''), plate=c.get('F',''), owner=c.get('G',''), ownership=c.get('H',''), status=c.get('K',''), consumptionHint=c.get('L',''))
                 else:
                     p = dict(code=c.get('B',''), unit=c.get('A',''), type=c.get('D',''), model=c.get('H',''), plate=c.get('I',''), owner=c.get('N',''), ownership=c.get('L',''), status=c.get('P',''), productHint=c.get('J',''))
                 catalogs.append({**p, 'sourceSheet': sheet_name, 'sourceRow': row, 'issues': errors + ['Confirmar capacidade por combustível e leitura inicial antes de ativar.']})
             continue
         if sheet_name not in LAYOUTS: continue
         incoming, outgoing, code, author, reading, nf, price, total_in, total_out = LAYOUTS[sheet_name]
+        headers = next((c for r,c,e in sheet['rows'] if r == 4), {})
+        unit_column = next((column for column,value in headers.items() if value.strip().upper() == 'CR'), '')
         summary = {'sheet': sheet_name, 'state': sheet['state'], 'records': 0, 'inMl': 0, 'outMl': 0}
         for row, c, errors in sheet['rows']:
             if row < 5: continue
@@ -90,9 +92,12 @@ def prepare(path):
                 if kind == 'legacy-out' and not c.get(reading): issues.append('Leitura não informada na origem.')
                 if sheet['state'] != 'visible': issues.append('Aba oculta no arquivo original.')
                 if sheet_name != 'CONTROLE ARLA': issues.append('Tipo de diesel não especificado na origem.')
+                if not c.get(unit_column) or c.get(unit_column, '').startswith('#'): issues.append('CR original ausente ou com erro; conferir a unidade manualmente.')
                 issues = issues[:10]
-                record = dict(kind=kind, businessDate=(origin + datetime.timedelta(days=float(date_value))).date().isoformat(), quantityMl=int(quantity.quantize(Decimal('1'),rounding=ROUND_HALF_UP)), assetId=c.get(code,'')[:100], operatorName=c.get(author,'')[:100], legacyReading=c.get(reading,'')[:100], reference=c.get(nf,'')[:120] if nf else '', unitPriceText=c.get(price,'')[:100] if price else '', totalText=c.get(total_in if kind == 'legacy-in' else total_out,'')[:100] if (total_in if kind == 'legacy-in' else total_out) else '', product='arla32' if sheet_name == 'CONTROLE ARLA' else 'diesel-nao-especificado', sourceSheet=sheet_name, sourceRow=row, sourceColumn=column, issues=issues)
+                record = dict(kind=kind, businessDate=(origin + datetime.timedelta(days=float(date_value))).date().isoformat(), quantityMl=int(quantity.quantize(Decimal('1'),rounding=ROUND_HALF_UP)), assetId=c.get(code,'')[:100], personName=c.get(author,'')[:100], legacyReading=c.get(reading,'')[:100], reference=c.get(nf,'')[:120] if nf else '', unitPriceText=c.get(price,'')[:100] if price else '', totalText=c.get(total_in if kind == 'legacy-in' else total_out,'')[:100] if (total_in if kind == 'legacy-in' else total_out) else '', product='arla32' if sheet_name == 'CONTROLE ARLA' else 'diesel-nao-especificado', sourceSheet=sheet_name, sourceRow=row, sourceColumn=column, issues=issues)
                 record['id'] = digest('MACER-XLSX|' + sheet_name + '|' + str(row) + '|' + column)
+                record['sourceUnit'] = c.get(unit_column, '')[:100]
+                record['sourcePersonLabel'] = headers.get(author, '')[:40]
                 records.append(record)
                 summary['records'] += 1
                 summary['inMl' if kind == 'legacy-in' else 'outMl'] += record['quantityMl']

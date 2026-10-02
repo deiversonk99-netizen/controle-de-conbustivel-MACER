@@ -232,7 +232,9 @@ try {
         businessDate: '2025-02-13',
         quantityMl: 25600,
         assetId: 'LEGADO-E2E',
-        operatorName: 'Origem fictícia',
+        sourceUnit: 'MC101',
+        sourcePersonLabel: 'MOT.',
+        personName: 'Origem fictícia',
         legacyReading: '99,5',
         reference: '',
         unitPriceText: '',
@@ -252,7 +254,8 @@ try {
   });
   await expect(page.getByLabel('Importar aba Aba teste')).not.toBeChecked();
   await page.getByLabel('Importar aba Aba teste').check();
-  await page.getByLabel(/Confirmei que todas as abas selecionadas/).check();
+  await page.getByLabel('Incluir CR MC101').check();
+  await page.getByLabel(/Confirmei que todos os registros selecionados/).check();
   await page.getByRole('button', { name: 'Importar histórico conferido (1)', exact: true }).click();
   await expect(page.getByText(/1 importados; 0 já existentes/)).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Importar histórico conferido (1)', exact: true }).click();

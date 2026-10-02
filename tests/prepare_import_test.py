@@ -18,9 +18,9 @@ class PrepareImportTests(unittest.TestCase):
             with zipfile.ZipFile(file, 'w') as z:
                 z.writestr('xl/workbook.xml', f'<workbook xmlns="{NS}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="CA111" sheetId="1" r:id="r1"/><sheet name="CADASTRO" sheetId="2" r:id="r2"/></sheets></workbook>')
                 z.writestr('xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="r1" Target="worksheets/sheet1.xml"/><Relationship Id="r2" Target="worksheets/sheet2.xml"/></Relationships>')
-                rows = []
+                rows = [f'<row r="4">{cell("D4","MOT.")}{cell("T4","CR")}</row>']
                 for row, quantity in [(5, '25.6'), (6, '10'), (7, '-140')]:
-                    rows.append(f'<row r="{row}" hidden="1">' + ''.join(cell(f'{c}{row}', v) for c,v in [('B','46278'),('Q',quantity),('E','A1'),('K','101,2')]) + '</row>')
+                    rows.append(f'<row r="{row}" hidden="1">' + ''.join(cell(f'{c}{row}', v) for c,v in [('B','46278'),('Q',quantity),('E','A1'),('K','101,2'),('T','MC101'),('D','Motorista fictício')]) + '</row>')
                 z.writestr('xl/worksheets/sheet1.xml', f'<worksheet xmlns="{NS}"><sheetData>{"".join(rows)}</sheetData><autoFilter ref="B4:Q7"/></worksheet>')
                 z.writestr('xl/worksheets/sheet2.xml', f'<worksheet xmlns="{NS}"><sheetData><row r="4">{cell("B4","A1")}{cell("C4","Obra teste")}</row><row r="5">{cell("B5","A-1")}</row></sheetData></worksheet>')
             package = module.prepare(file)
@@ -30,6 +30,9 @@ class PrepareImportTests(unittest.TestCase):
             self.assertEqual(package['rejected'][0]['sourceRow'], 7)
             self.assertEqual(package['records'][0]['legacyReading'], '101,2')
             self.assertEqual(package['records'][0]['sourceColumn'], 'Q')
+            self.assertEqual(package['records'][0]['sourceUnit'], 'MC101')
+            self.assertEqual(package['records'][0]['sourcePersonLabel'], 'MOT.')
+            self.assertEqual(package['records'][0]['personName'], 'Motorista fictício')
             self.assertNotIn('balanceMl', package['catalogs'][0])
             self.assertTrue(any('repetido' in s for s in package['catalogs'][0]['issues']))
             previous = package['records'][0]['id']

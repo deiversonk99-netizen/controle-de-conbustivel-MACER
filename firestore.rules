@@ -313,11 +313,11 @@ service cloud.firestore {
     function validArchivedRow(site,id) {
       let d = request.resource.data;
       return id.matches('^[a-f0-9]{64}$')
-        && d.keys().hasAll(['kind','businessDate','quantityMl','assetId','operatorName','legacyReading','reference','unitPriceText','totalText','product','sourceSheet','sourceRow','sourceColumn','issues','contentHash','sourceHash','importedBy','importedAt'])
-        && d.keys().hasOnly(['kind','businessDate','quantityMl','assetId','operatorName','legacyReading','reference','unitPriceText','totalText','product','sourceSheet','sourceRow','sourceColumn','issues','contentHash','sourceHash','importedBy','importedAt'])
+        && d.keys().hasAll(['kind','businessDate','quantityMl','assetId','personName','sourcePersonLabel','sourceUnit','legacyReading','reference','unitPriceText','totalText','product','sourceSheet','sourceRow','sourceColumn','issues','contentHash','sourceHash','importedBy','importedAt'])
+        && d.keys().hasOnly(['kind','businessDate','quantityMl','assetId','personName','sourcePersonLabel','sourceUnit','legacyReading','reference','unitPriceText','totalText','product','sourceSheet','sourceRow','sourceColumn','issues','contentHash','sourceHash','importedBy','importedAt'])
         && d.kind in ['legacy-in','legacy-out'] && positive(d.quantityMl)
         && d.businessDate is string && d.businessDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && text(d.assetId,100) && text(d.operatorName,100) && text(d.legacyReading,100)
+        && text(d.assetId,100) && text(d.personName,100) && text(d.sourcePersonLabel,40) && text(d.sourceUnit,100) && text(d.legacyReading,100)
         && text(d.reference,120) && text(d.unitPriceText,100) && text(d.totalText,100)
         && d.product in ['arla32','diesel-nao-especificado']
         && text(d.sourceSheet,100) && d.sourceSheet.size() > 0 && positive(d.sourceRow)
