@@ -11,12 +11,14 @@ export default function OperationForm({
   prepared,
   online,
   save,
+  onDraft,
 }: {
   kind: string;
   data: Record<string, Row[]>;
   prepared: number;
   online: boolean;
   save: (c: any, image?: string) => Promise<void>;
+  onDraft: (value: boolean) => void;
 }) {
   const [tankId, setTank] = useState(''),
     [assetId, setAsset] = useState(''),
@@ -26,7 +28,9 @@ export default function OperationForm({
     [quantity, setQuantity] = useState(''),
     [price, setPrice] = useState('0');
   const inFlight = useRef(false),
-    id = useRef(crypto.randomUUID());
+    id = useRef(crypto.randomUUID()),
+    formRef = useRef<HTMLFormElement>(null);
+  const [review, setReview] = useState<{ command: any; image?: string } | null>(null);
   const tank = data.tanks.find((t) => t.id === tankId),
     asset = data.assets.find((a) => a.id === assetId);
   let total = '—';
@@ -64,13 +68,45 @@ export default function OperationForm({
       });
       if (!tank?.active || (kind === 'fuel' && !asset?.active))
         throw Error('Selecione os cadastros ativos.');
+      if (kind === 'fuel' && asset) {
+        const capacity =
+          asset.capacities?.[tank.product] ||
+          (asset.product === tank.product ? asset.capacityMl : 0);
+        if (!capacity)
+          throw Error('Este veículo não está cadastrado para o combustível selecionado.');
+        if (c.quantityMl > capacity)
+          throw Error(
+            `Confira os litros: a capacidade deste veículo é ${formatMilli(capacity)} L.`,
+          );
+        if (c.readingMilli < asset.readingMilli)
+          throw Error(
+            `Confira a leitura: ela não pode ser menor que ${formatMilli(asset.readingMilli)}. Se o medidor foi trocado, procure o responsável.`,
+          );
+      }
       const file = f.get('photo') as File | null,
         image = file?.size ? await compactPhoto(file) : undefined;
-      await save(c, image);
+      setReview({ command: c, image });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+  async function confirm() {
+    if (!review || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      await save(review.command, review.image);
+      onDraft(false);
       id.current = crypto.randomUUID();
-      form.reset();
+      formRef.current?.reset();
+      setReview(null);
       setTank('');
       setAsset('');
+      setSearch('');
       setQuantity('');
       setPrice('0');
     } catch (e) {
@@ -83,12 +119,88 @@ export default function OperationForm({
   return (
     <section className="card">
       <h2>{names[kind]}</h2>
+      <p>
+        {review
+          ? '2 de 2 · Confira antes de confirmar'
+          : '1 de 2 · Preencha os dados do abastecimento ou movimento'}
+      </p>
+      {!prepared && (
+        <p className="warning">
+          Conecte à internet e toque em “Sincronizar / atualizar” para preparar este aparelho.
+        </p>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
-      <form onSubmit={submit}>
+      {review && (
+        <section className="review-card" aria-label="Conferir lançamento">
+          <h3>Está tudo certo?</h3>
+          <dl>
+            <dt>Tanque</dt>
+            <dd>
+              {tank?.name} · {productName(tank?.product)}
+            </dd>
+            {asset && (
+              <>
+                <dt>Veículo</dt>
+                <dd>
+                  {asset.code} · {asset.plate} · {asset.name}
+                </dd>
+                <dt>Leitura</dt>
+                <dd>
+                  {formatMilli(review.command.readingMilli)} {asset.meter === 'km' ? 'km' : 'h'}
+                </dd>
+              </>
+            )}
+            {review.command.destinationTankId && (
+              <>
+                <dt>Destino</dt>
+                <dd>{data.tanks.find((t) => t.id === review.command.destinationTankId)?.name}</dd>
+              </>
+            )}
+            <dt>Quantidade</dt>
+            <dd>
+              <strong>{formatMilli(review.command.quantityMl)} litros</strong>
+            </dd>
+            <dt>Total</dt>
+            <dd>{money(review.command.totalCents)}</dd>
+            {review.command.driverId && (
+              <>
+                <dt>Motorista</dt>
+                <dd>{data.drivers.find((d) => d.id === review.command.driverId)?.name}</dd>
+              </>
+            )}
+            {review.command.reference && (
+              <>
+                <dt>Documento</dt>
+                <dd>{review.command.reference}</dd>
+              </>
+            )}
+            {review.image && (
+              <>
+                <dt>Foto</dt>
+                <dd>Comprovante anexado</dd>
+              </>
+            )}
+          </dl>
+          <p>
+            {online
+              ? 'Ao confirmar, o registro será salvo no aparelho e enviado.'
+              : 'Sem internet: pode confirmar. O registro ficará salvo neste aparelho para envio quando a conexão voltar.'}
+          </p>
+          <div className="actions">
+            <button disabled={busy} onClick={confirm}>
+              {busy ? 'Salvando…' : 'Confirmar e salvar'}
+            </button>
+            <button className="secondary" disabled={busy} onClick={() => setReview(null)}>
+              Voltar e corrigir
+            </button>
+          </div>
+        </section>
+      )}
+      <form ref={formRef} onSubmit={submit} onChangeCapture={() => onDraft(true)} hidden={!!review}>
         <fieldset disabled={busy || !prepared}>
           <div className="form-grid">
             <Field label="Tanque de estoque">
@@ -127,7 +239,14 @@ export default function OperationForm({
             {kind === 'fuel' && (
               <>
                 <Field label="Pesquisar código ou placa">
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} />
+                  <input
+                    placeholder="Ex.: CP-30 ou placa do veículo"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setAsset('');
+                    }}
+                  />
                 </Field>
                 <Field label="Veículo / equipamento">
                   <select required value={assetId} onChange={(e) => setAsset(e.target.value)}>
@@ -148,6 +267,14 @@ export default function OperationForm({
                         </option>
                       ))}
                   </select>
+                  {!tankId && <small>Escolha primeiro o tanque de estoque.</small>}
+                  {asset && (
+                    <small>
+                      Capacidade:{' '}
+                      {formatMilli(asset.capacities?.[tank?.product] || asset.capacityMl || 0)} L ·{' '}
+                      {asset.name}
+                    </small>
+                  )}
                 </Field>
                 <Field label="Motorista (opcional)">
                   <select name="driver">
@@ -176,6 +303,7 @@ export default function OperationForm({
                 required
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Ex.: 25,6"
               />
             </Field>
             <Field label="Preço por litro (R$)">
@@ -217,7 +345,7 @@ export default function OperationForm({
               antes de lançar.
             </p>
           )}
-          <button type="submit">{busy ? 'Salvando…' : 'Salvar lançamento'}</button>
+          <button type="submit">{busy ? 'Preparando…' : 'Conferir lançamento'}</button>
         </fieldset>
       </form>
     </section>

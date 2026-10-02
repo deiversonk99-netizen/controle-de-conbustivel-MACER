@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { chromium, expect } from '@playwright/test';
 const environment = {
   ...process.env,
@@ -137,7 +137,25 @@ try {
   await page.getByLabel('Leitura horímetro (h)', { exact: false }).fill('101');
   await page.getByLabel('Quantidade (litros)').fill('10');
   await page.getByLabel('Preço por litro (R$)').fill('6,12');
-  await page.getByRole('button', { name: 'Salvar lançamento', exact: true }).click();
+  await page.getByLabel('Leitura horímetro (h)', { exact: false }).fill('99');
+  await page.getByRole('button', { name: 'Conferir lançamento', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('não pode ser menor');
+  await page.getByLabel('Leitura horímetro (h)', { exact: false }).fill('101');
+  await page.getByLabel('Quantidade (litros)').fill('201');
+  await page.getByRole('button', { name: 'Conferir lançamento', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('capacidade');
+  await page.getByLabel('Quantidade (litros)').fill('10');
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.getByRole('button', { name: 'Resumo', exact: true }).click();
+  await expect(page.getByLabel('Quantidade (litros)')).toHaveValue('10');
+  await page.getByRole('button', { name: 'Conferir lançamento', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Está tudo certo?' })).toBeVisible();
+  await mkdir('test-results', { recursive: true });
+  await page.screenshot({ path: 'test-results/mobile-review.png', fullPage: true });
+  await page.getByRole('button', { name: 'Voltar e corrigir', exact: true }).click();
+  await expect(page.getByLabel('Quantidade (litros)')).toHaveValue('10');
+  await page.getByRole('button', { name: 'Conferir lançamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmar e salvar', exact: true }).click();
   await page.getByRole('button', { name: 'Pendências (1)', exact: true }).click();
   await expect(page.getByText(/Aguardando envio/)).toBeVisible();
   await page.reload();
@@ -162,6 +180,34 @@ try {
   await page.getByRole('button', { name: 'Histórico', exact: true }).click();
   await expect(page.getByRole('cell', { name: /Abastecimento.*Diesel S10/ })).toBeVisible();
   await page.screenshot({ path: 'test-results/mobile-history.png', fullPage: true });
+  // A stale offline input must be preserved without changing stock when the server has a newer meter.
+  await page.getByRole('button', { name: 'Abastecer', exact: true }).click();
+  await context.setOffline(true);
+  await page.getByLabel('Tanque de estoque').selectOption('T1');
+  await page.getByLabel('Veículo / equipamento').selectOption('A1');
+  await page.getByLabel('Leitura horímetro (h)', { exact: false }).fill('102');
+  await page.getByLabel('Quantidade (litros)').fill('1');
+  await page.getByRole('button', { name: 'Conferir lançamento', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmar e salvar', exact: true }).click();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), 'sites', 'e2e', 'assets', 'A1'), { readingMilli: 105000 });
+  });
+  await page.getByRole('button', { name: 'Pendências (1)', exact: true }).click();
+  await context.setOffline(false);
+  await expect(page.getByText(/Abastecimento · 1 L · Conferência necessária/)).toBeVisible({
+    timeout: 60000,
+  });
+  await expect(page.getByRole('button', { name: 'Tratar pendência' })).toBeVisible({
+    timeout: 30000,
+  });
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    expect(
+      (await getDoc(doc(ctx.firestore(), 'sites', 'e2e', 'tanks', 'T1'))).data().balanceMl,
+    ).toBe(90000);
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Pendências (1)', exact: true }).click();
+  await expect(page.getByText(/Abastecimento · 1 L · Conferência necessária/)).toBeVisible();
   await page.getByRole('button', { name: 'Usuários', exact: true }).click();
   await page.getByLabel('Nome', { exact: true }).fill('Operador E2E');
   await page.getByLabel('E-mail', { exact: true }).fill('operator-e2e@example.com');
@@ -172,7 +218,7 @@ try {
   await expect(page.getByText('Administrador · Administrador E2E', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
   console.log(
-    'E2E PASS: mobile driver registration, durable offline queue, reload without internet, automatic sync, exact single stock debit, responsive width.',
+    'E2E PASS: mobile driver registration, local validation, review/correction, unsaved-form protection, durable offline queue, offline reload, automatic sync, exact single debit, server conflict preserved without stock change, responsive width and user provisioning.',
   );
 } catch (e) {
   if (page) {

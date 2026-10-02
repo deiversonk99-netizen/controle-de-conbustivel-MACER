@@ -19,6 +19,16 @@ export default function AppWorkspace({
     [loading, setLoading] = useState(true);
   const [online, setOnline] = useState(navigator.onLine),
     [ready, setReady] = useState(false);
+  const [draft, setDraft] = useState(false);
+  useEffect(() => {
+    if (!draft) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [draft]);
   useEffect(() => {
     const change = () => setOnline(navigator.onLine);
     window.addEventListener('online', change);
@@ -75,6 +85,13 @@ export default function AppWorkspace({
     };
   }, [user.uid, online]);
   async function logout() {
+    if (
+      draft &&
+      !window.confirm(
+        'Você está preenchendo um lançamento que ainda não foi salvo. Deseja sair e descartar esse preenchimento?',
+      )
+    )
+      return;
     const pending = (await queueList(user.uid)).filter(
       (q) => !['synced', 'resolved'].includes(q.state),
     );
@@ -131,7 +148,20 @@ export default function AppWorkspace({
               </div>
               <label>
                 Unidade
-                <select value={site} onChange={(e) => setSite(e.target.value)}>
+                <select
+                  value={site}
+                  onChange={(e) => {
+                    if (
+                      !draft ||
+                      window.confirm(
+                        'O lançamento em preenchimento ainda não foi salvo. Deseja trocar de unidade e descartar esse preenchimento?',
+                      )
+                    ) {
+                      setDraft(false);
+                      setSite(e.target.value);
+                    }
+                  }}
+                >
                   {profile.siteIds.map((s) => (
                     <option key={s}>{s}</option>
                   ))}
@@ -145,6 +175,8 @@ export default function AppWorkspace({
                 site={site}
                 profile={profile}
                 online={online}
+                draft={draft}
+                onDraft={setDraft}
               />
             )}
           </>

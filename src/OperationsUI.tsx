@@ -39,11 +39,15 @@ export default function OperationsUI({
   site,
   profile,
   online,
+  draft,
+  onDraft,
 }: {
   uid: string;
   site: string;
   profile: Profile;
   online: boolean;
+  draft: boolean;
+  onDraft: (value: boolean) => void;
 }) {
   const [tab, setTab] = useState('home'),
     [data, setData] = useState<Record<string, Row[]>>({
@@ -73,6 +77,12 @@ export default function OperationsUI({
     cacheKey = `catalog:${uid}:${site}`;
   const pending = items.filter((q) => !['synced', 'resolved'].includes(q.state)),
     reversals = Object.fromEntries(data.reversals.map((r) => [r.id, r]));
+  const lastSaved = useRef('');
+  const waitingReview = data.pending.filter(
+    (p) => !(data.resolutions || []).some((r) => r.id === p.id),
+  );
+  const attentionCount = new Set([...pending.map((p) => p.id), ...waitingReview.map((p) => p.id)])
+    .size;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -106,6 +116,60 @@ export default function OperationsUI({
       stop?.();
     };
   }, [online, site]);
+  useEffect(() => {
+    if (!online) return;
+    let cancelled = false;
+    const stops: (() => void)[] = [];
+    getDatabase()
+      .then((db) => {
+        if (cancelled) return;
+        const historyQuery = query(
+          collection(db, 'sites', site, 'operations'),
+          ...(manager ? [] : [where('createdBy', '==', uid)]),
+          orderBy('createdAt', 'desc'),
+          limit(100),
+        );
+        stops.push(
+          onSnapshot(
+            historyQuery,
+            (snapshot) => {
+              if (snapshot.metadata.fromCache || cancelled) return;
+              const rows = snapshot.docs.map((s) => pack({ ...s.data(), id: s.id }));
+              setData((d) => ({
+                ...d,
+                history: [...new Map([...d.history, ...rows].map((r) => [r.id, r])).values()],
+              }));
+              if (snapshot.size === 100) setMore(true);
+            },
+            (e) => setError(errorMessage(e)),
+          ),
+        );
+        for (const group of [
+          'reviews',
+          'reversals',
+          ...(manager ? ['pending', 'resolutions'] : []),
+        ]) {
+          stops.push(
+            onSnapshot(
+              collection(db, 'sites', site, group),
+              (snapshot) => {
+                if (snapshot.metadata.fromCache || cancelled) return;
+                setData((d) => ({
+                  ...d,
+                  [group]: snapshot.docs.map((s) => pack({ ...s.data(), id: s.id })),
+                }));
+              },
+              (e) => setError(errorMessage(e)),
+            ),
+          );
+        }
+      })
+      .catch((e) => setError(errorMessage(e)));
+    return () => {
+      cancelled = true;
+      stops.forEach((stop) => stop());
+    };
+  }, [online, site, uid, manager]);
   async function checkAccess() {
     const db = await getDatabase(),
       p = await getDocFromServer(doc(db, 'users', uid));
@@ -179,7 +243,15 @@ export default function OperationsUI({
         isCurrent: () => mounted.current && auth?.currentUser?.uid === uid,
       });
       if (mounted.current) {
-        setItems(await queueList(uid, site));
+        const current = await queueList(uid, site);
+        setItems(current);
+        const latest = current.find((q) => q.id === lastSaved.current);
+        if (latest?.state === 'synced')
+          setMessage('Enviado e confirmado. Você já pode registrar o próximo abastecimento.');
+        else if (latest?.state === 'conflict')
+          setMessage(
+            'Salvo no aparelho, mas precisa de conferência. Abra Pendências para ver o motivo.',
+          );
         await refresh();
       }
     } catch (e) {
@@ -248,9 +320,14 @@ export default function OperationsUI({
       state: 'queued',
       queuedAt: Date.now(),
     });
+    lastSaved.current = c.id;
     setItems(await queueList(uid, site));
     navigator.storage?.persist?.().catch(() => {});
-    setMessage('Salvo neste aparelho. Acompanhe o protocolo e a confirmação em Pendências.');
+    setMessage(
+      navigator.onLine
+        ? 'Salvo neste aparelho. Enviando… não é preciso lançar novamente.'
+        : 'Salvo neste aparelho, sem internet. O envio será automático quando a conexão voltar com o aplicativo aberto. Não é preciso lançar novamente.',
+    );
     void sync();
   }
   async function historyPage(full = false) {
@@ -304,7 +381,7 @@ export default function OperationsUI({
       : []),
     ...(admin ? [['opening', 'Saldo inicial']] : []),
     ['history', 'Histórico'],
-    ['queue', `Pendências (${pending.length})`],
+    ['queue', `Pendências (${attentionCount})`],
     ...(admin
       ? [
           ['drivers', 'Motoristas'],
@@ -325,6 +402,15 @@ export default function OperationsUI({
             aria-pressed={tab === id}
             disabled={busy}
             onClick={() => {
+              if (
+                id !== tab &&
+                draft &&
+                !window.confirm(
+                  'Este lançamento ainda não foi salvo. Deseja mudar de tela e descartar o preenchimento?',
+                )
+              )
+                return;
+              if (id !== tab) onDraft(false);
               setTab(id);
               setError('');
               setMessage('');
@@ -357,6 +443,45 @@ export default function OperationsUI({
       )}
       {tab === 'home' && (
         <>
+          <section className="card quick-start">
+            <h2>O que você precisa fazer?</h2>
+            <p>
+              Para registrar um abastecimento, selecione o veículo, informe a leitura e os litros e
+              confira antes de salvar.
+            </p>
+            <div className="actions">
+              <button onClick={() => setTab('fuel')}>Novo abastecimento</button>
+              <button className="secondary" onClick={() => setTab('history')}>
+                Ver meus registros
+              </button>
+              {attentionCount > 0 && (
+                <button className="secondary" onClick={() => setTab('queue')}>
+                  Ver {attentionCount} pendência(s)
+                </button>
+              )}
+            </div>
+            <details>
+              <summary>Como usar sem internet</summary>
+              <ol>
+                <li>
+                  Antes de sair, entre com internet e toque em “Sincronizar / atualizar”. Aguarde os
+                  cadastros e a mensagem “Aplicação disponível offline”.
+                </li>
+                <li>
+                  Registre normalmente sem internet. “Salvo neste aparelho” significa que ainda
+                  falta enviar.
+                </li>
+                <li>
+                  Quando a conexão voltar, mantenha o aplicativo aberto até aparecer “Confirmado” em
+                  Pendências.
+                </li>
+              </ol>
+              <p>
+                Use o mesmo aparelho e navegador. Não use navegação anônima nem apague os dados do
+                navegador enquanto houver registros aguardando envio.
+              </p>
+            </details>
+          </section>
           <div className="stats">
             <section className="card">
               <span>Abastecimentos hoje</span>
@@ -407,6 +532,7 @@ export default function OperationsUI({
           online={online}
           prepared={prepared}
           save={enqueue}
+          onDraft={onDraft}
         />
       )}
       {tab === 'history' && (
@@ -476,7 +602,10 @@ export default function OperationsUI({
                       : 'Aguardando envio'}
               </strong>
               <p>
-                {q.command.assetId} · {new Date(q.queuedAt).toLocaleString('pt-BR')}
+                {data.assets.find((a) => a.id === q.command.assetId)?.code ||
+                  data.tanks.find((t) => t.id === q.command.tankId)?.name ||
+                  q.command.assetId}{' '}
+                · {new Date(q.queuedAt).toLocaleString('pt-BR')}
               </p>
               <small>Protocolo: {q.id}</small>
               {q.error && <p className="error">{q.error}</p>}
