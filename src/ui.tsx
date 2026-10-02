@@ -1,4 +1,11 @@
-import type { ReactNode } from 'react';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useId,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { civilDay } from './domain/business.mjs';
 export type Row = Record<string, any>;
 export const names: Record<string, string> = {
@@ -14,8 +21,10 @@ export const errorMessage = (e: any) =>
   e.code === 'unavailable'
     ? 'A conexão está sendo restabelecida. A fila permanece salva para reenvio.'
     : e.code === 'permission-denied'
-      ? 'Acesso negado. Confira perfil, unidade e regras publicadas.'
-      : e.message || 'Não foi possível concluir.';
+      ? 'Seu acesso não permite esta ação. Procure o responsável pela unidade. Os registros já salvos no aparelho foram mantidos.'
+      : e.name === 'QuotaExceededError'
+        ? 'Não foi possível salvar: o armazenamento do aparelho está cheio. Não apague registros pendentes. Em Pendências, libere apenas as cópias já confirmadas e tente novamente.'
+        : e.message || 'Não foi possível concluir.';
 export const pack = (value: any): any =>
   value?.toMillis
     ? { milliseconds: value.toMillis() }
@@ -28,10 +37,19 @@ export const day = (o: Row) =>
   o.businessDate ||
   civilDay(o.createdAt?.milliseconds || o.createdAt?.toMillis?.() || o.capturedAtMs);
 export function Field({ label, children }: { label: string; children: ReactNode }) {
+  const labelId = useId();
   return (
     <label>
-      {label}
-      {children}
+      <span id={labelId}>{label}</span>
+      {Children.map(children, (child) =>
+        isValidElement(child) &&
+        typeof child.type === 'string' &&
+        ['input', 'select', 'textarea'].includes(child.type)
+          ? cloneElement(child as ReactElement<Record<string, unknown>>, {
+              'aria-labelledby': labelId,
+            })
+          : child,
+      )}
     </label>
   );
 }

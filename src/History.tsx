@@ -187,12 +187,16 @@ export default function History({
           <tbody>
             {filtered.map((o) => (
               <tr key={o.id}>
-                <td>{day(o)}</td>
+                <td>{day(o).split('-').reverse().join('/')}</td>
                 <td>
                   {names[o.kind]}
                   <small>{productName(o.product)}</small>
                 </td>
-                <td>{o.assetId || data.tanks.find((t) => t.id === o.tankId)?.name}</td>
+                <td>
+                  {o.assetId
+                    ? data.assets.find((a) => a.id === o.assetId)?.code || o.assetId
+                    : data.tanks.find((t) => t.id === o.tankId)?.name}
+                </td>
                 <td>{formatMilli(o.quantityMl)}</td>
                 <td>{effectiveStatus(o, reviews, reversals)}</td>
                 <td>
