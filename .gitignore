@@ -16,4 +16,5 @@ dist-e2e/
 *serviceAccount*.json
 imports/
 backups/
+__pycache__/
 

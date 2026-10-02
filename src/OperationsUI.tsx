@@ -33,6 +33,7 @@ import CatalogForm from './CatalogForm';
 import History from './History';
 import Users from './Users';
 import PendingPanel from './PendingPanel';
+import Migration from './Migration';
 
 export default function OperationsUI({
   uid,
@@ -390,7 +391,12 @@ export default function OperationsUI({
           ['users', 'Usuários'],
         ]
       : []),
-    ...(manager ? [['audit', 'Auditoria']] : []),
+    ...(manager
+      ? [
+          ['audit', 'Auditoria'],
+          ['migration', 'Implantação / planilha'],
+        ]
+      : []),
   ];
   return (
     <>
@@ -440,6 +446,17 @@ export default function OperationsUI({
         <p className="error" role="alert">
           {error}
         </p>
+      )}
+      {tab === 'migration' && manager && (
+        <Migration
+          key={site + uid}
+          site={site}
+          uid={uid}
+          admin={admin}
+          online={online}
+          assets={data.assets}
+          action={action}
+        />
       )}
       {tab === 'home' && (
         <>

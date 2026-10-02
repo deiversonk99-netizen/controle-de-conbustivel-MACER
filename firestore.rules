@@ -294,6 +294,44 @@ service cloud.firestore {
         && d.openingMl is int && d.inMl is int && d.inMl >= 0 && d.outMl is int && d.outMl >= 0 && d.balanceMl == d.openingMl + d.inMl - d.outMl
         && d.status == (d.differenceMl == 0 ? 'OK' : 'DIVERGENCIA') && text(d.reason,500) && (d.differenceMl == 0 || d.reason.size() > 0);
     }
+    // The archive is isolated: no historical row can debit a current tank or update a meter.
+    match /sites/{site}/imports/{id} {
+      allow read: if manager(site);
+      allow create: if admin(site) && id.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasAll(['sourceName','sourceHash','createdBy','createdAt'])
+        && request.resource.data.keys().hasOnly(['sourceName','sourceHash','createdBy','createdAt'])
+        && text(request.resource.data.sourceName,254) && request.resource.data.sourceName.size() > 0
+        && request.resource.data.sourceHash == id
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+    match /sites/{site}/legacyHistory/{id} {
+      allow read: if manager(site);
+      allow create: if admin(site) && validArchivedRow(site,id);
+      allow update, delete: if false;
+    }
+    function validArchivedRow(site,id) {
+      let d = request.resource.data;
+      return id.matches('^[a-f0-9]{64}$')
+        && d.keys().hasAll(['kind','businessDate','quantityMl','assetId','personName','sourcePersonLabel','sourceUnit','legacyReading','reference','unitPriceText','totalText','product','sourceSheet','sourceRow','sourceColumn','issues','contentHash','sourceHash','importedBy','importedAt'])
+        && d.keys().hasOnly(['kind','businessDate','quantityMl','assetId','personName','sourcePersonLabel','sourceUnit','legacyReading','reference','unitPriceText','totalText','product','sourceSheet','sourceRow','sourceColumn','issues','contentHash','sourceHash','importedBy','importedAt'])
+        && d.kind in ['legacy-in','legacy-out'] && positive(d.quantityMl)
+        && d.businessDate is string && d.businessDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && text(d.assetId,100) && text(d.personName,100) && text(d.sourcePersonLabel,40) && text(d.sourceUnit,100) && text(d.legacyReading,100)
+        && text(d.reference,120) && text(d.unitPriceText,100) && text(d.totalText,100)
+        && d.product in ['arla32','diesel-nao-especificado']
+        && text(d.sourceSheet,100) && d.sourceSheet.size() > 0 && positive(d.sourceRow)
+        && d.sourceColumn is string && d.sourceColumn.matches('^[A-Z]{1,3}$')
+        && d.issues is list && d.issues.size() <= 10
+        && archivedIssue(d.issues,0) && archivedIssue(d.issues,1) && archivedIssue(d.issues,2)
+        && archivedIssue(d.issues,3) && archivedIssue(d.issues,4) && archivedIssue(d.issues,5)
+        && archivedIssue(d.issues,6) && archivedIssue(d.issues,7) && archivedIssue(d.issues,8) && archivedIssue(d.issues,9)
+        && d.contentHash is string && d.contentHash.matches('^[a-f0-9]{64}$')
+        && d.sourceHash is string && d.sourceHash.matches('^[a-f0-9]{64}$')
+        && existsAfter(/databases/$(database)/documents/sites/$(site)/imports/$(d.sourceHash))
+        && d.importedBy == request.auth.uid && d.importedAt == request.time;
+    }
+    function archivedIssue(issues,i) { return issues.size() <= i || text(issues[i],500); }
     match /{document=**} { allow read, write: if false; }
   }
 }

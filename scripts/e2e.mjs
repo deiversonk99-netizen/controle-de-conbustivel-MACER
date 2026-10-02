@@ -216,6 +216,74 @@ try {
   await page.getByRole('button', { name: 'Criar / liberar usuário', exact: true }).click();
   await expect(page.getByRole('cell', { name: /Operador E2E/ })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText('Administrador · Administrador E2E', { exact: true })).toBeVisible();
+  // A historical import must never consume the current stock and is readable offline after loading.
+  await page.getByRole('button', { name: 'Implantação / planilha', exact: true }).click();
+  const archive = {
+    format: 'macer-archive-v1',
+    sourceName: 'arquivo-ficticio.xlsx',
+    sourceHash: 'b'.repeat(64),
+    catalogs: [],
+    rejected: [],
+    summary: [{ sheet: 'Aba teste', state: 'visible' }],
+    records: [
+      {
+        id: 'a'.repeat(64),
+        kind: 'legacy-out',
+        businessDate: '2025-02-13',
+        quantityMl: 25600,
+        assetId: 'LEGADO-E2E',
+        sourceUnit: 'MC101',
+        sourcePersonLabel: 'MOT.',
+        personName: 'Origem fictícia',
+        legacyReading: '99,5',
+        reference: '',
+        unitPriceText: '',
+        totalText: '',
+        product: 'diesel-nao-especificado',
+        sourceSheet: 'Aba teste',
+        sourceRow: 9,
+        sourceColumn: 'Q',
+        issues: [],
+      },
+    ],
+  };
+  await page.getByLabel('Pacote de conferência (.json)').setInputFiles({
+    name: 'conferencia-ficticia.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(archive)),
+  });
+  await expect(page.getByLabel('Importar aba Aba teste')).not.toBeChecked();
+  await page.getByLabel('Importar aba Aba teste').check();
+  await page.getByLabel('Incluir CR MC101').check();
+  await page.getByLabel(/Confirmei que todos os registros selecionados/).check();
+  await page.getByRole('button', { name: 'Importar histórico conferido (1)', exact: true }).click();
+  await expect(page.getByText(/1 importados; 0 já existentes/)).toBeVisible({ timeout: 30000 });
+  await page.getByRole('button', { name: 'Importar histórico conferido (1)', exact: true }).click();
+  await expect(page.getByText(/0 importados; 1 já existentes/)).toBeVisible({ timeout: 30000 });
+  await page
+    .getByRole('button', { name: 'Carregar / atualizar histórico da planilha', exact: true })
+    .click();
+  await expect(page.getByRole('cell', { name: 'LEGADO-E2E', exact: true })).toBeVisible();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    expect(
+      (await getDoc(doc(ctx.firestore(), 'sites', 'e2e', 'tanks', 'T1'))).data().balanceMl,
+    ).toBe(90000);
+    expect(
+      (await getDoc(doc(ctx.firestore(), 'sites', 'e2e', 'assets', 'A1'))).data().readingMilli,
+    ).toBe(105000);
+  });
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Implantação / planilha', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'LEGADO-E2E', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Carregar / atualizar histórico da planilha', exact: true }),
+  ).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(
+    false,
+  );
+  await page.screenshot({ path: 'test-results/mobile-archive-offline.png', fullPage: true });
+  await context.setOffline(false);
   expect(errors).toEqual([]);
   console.log(
     'E2E PASS: mobile driver registration, local validation, review/correction, unsaved-form protection, durable offline queue, offline reload, automatic sync, exact single debit, server conflict preserved without stock change, responsive width and user provisioning.',

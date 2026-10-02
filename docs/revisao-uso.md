@@ -1,4 +1,4 @@
-# Revisão para uso — 01/10/2026
+# Revisão para uso — 02/10/2026
 
 ## Conferência com o PDF
 
@@ -16,6 +16,7 @@
 | Pendências | Falhas de negócio preservadas; responsável corrige ou rejeita com motivo; contagem inclui pendências recebidas de outros aparelhos. |
 | Histórico/relatórios | Filtros, paginação, competência 21–20, exportação CSV para Excel; histórico recente e conferências atualizados enquanto conectado. |
 | Uso offline solicitado | Aplicação em cache, perfil/cadastros locais e fila IndexedDB por usuário/unidade; envio automático com app aberto; conflitos não alteram saldo. |
+| Migração da planilha | Pacote local de conferência, escolha de abas por unidade, propostas de cadastro, arquivo histórico imutável separado do estoque, importação retomável e consulta/CSV; depende de regras publicadas e unidade real conferida. |
 
 ## Orientação simples para a equipe
 
@@ -32,7 +33,7 @@ O aplicativo avisa ao tentar abandonar um abastecimento em preenchimento. Esse a
 
 O ambiente publicado contém a unidade de homologação e dados fictícios. Para iniciar operação real, o proprietário precisa informar unidades, responsáveis, veículos, capacidades, leituras iniciais e medição física de cada tanque. A capacidade de 5.000 L citada no PDF é configurável, não um saldo inicial presumido.
 
-A planilha histórica exige conferência de duplicidades de código e leituras divergentes antes de importação. Não foram criados saldos operacionais com base em células não conferidas. Registros legados sem leitura anterior não têm estorno automático.
+A planilha histórica exige conferência de duplicidades de código e leituras divergentes antes de importação. O processo está descrito em [Implantação conferida](implantacao-conferida.md). Não foram criados saldos operacionais com base em células não conferidas. O arquivo histórico é apenas consultável; não permite estornar movimentos antigos contra o estoque atual.
 
 QR Code, foto obrigatória, indicadores avançados de consumo e SAP estão explicitamente na evolução futura do PDF. Não há integração SAP nesta versão. O banco segue sujeito às cotas do plano gratuito.
 

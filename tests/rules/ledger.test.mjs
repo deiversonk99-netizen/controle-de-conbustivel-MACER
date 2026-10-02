@@ -28,6 +28,8 @@ import {
   dismissPending,
 } from '../../src/data/ledger.mjs';
 import { normalizeCommand, civilDay } from '../../src/domain/business.mjs';
+import { importArchive } from '../../src/data/archive.mjs';
+import { rowHash } from '../../src/domain/archive.mjs';
 let env;
 const client = (uid) => env.authenticatedContext(uid).firestore(),
   ref = (db, g, id) => doc(db, 'sites', 'base', g, id);
@@ -50,6 +52,108 @@ before(async () => {
   });
 });
 after(async () => env?.cleanup());
+const archiveRow = (id = 'a'.repeat(64)) => ({
+  id,
+  kind: 'legacy-out',
+  businessDate: '2025-02-13',
+  quantityMl: 25600,
+  assetId: 'A1',
+  sourceUnit: 'MC101',
+  sourcePersonLabel: 'MOT.',
+  personName: 'Origem',
+  legacyReading: '101,2',
+  reference: '',
+  unitPriceText: '',
+  totalText: '',
+  product: 'diesel-nao-especificado',
+  sourceSheet: 'CA111',
+  sourceRow: 9,
+  sourceColumn: 'Q',
+  issues: ['Conferir diesel'],
+});
+const archivePackage = (records = [archiveRow()]) => ({
+  format: 'macer-archive-v1',
+  sourceName: 'teste.xlsx',
+  sourceHash: 'b'.repeat(64),
+  records,
+  catalogs: [],
+  rejected: [],
+  summary: [],
+});
+test('archive import is immutable, resumable and does not change current stock or readings', async () => {
+  const db = client('admin'),
+    p = archivePackage();
+  const first = await importArchive(db, 'base', 'admin', p, ['CA111']);
+  assert.equal(first.inserted, 1);
+  const second = await importArchive(db, 'base', 'admin', p, ['CA111']);
+  assert.equal(second.inserted, 0);
+  assert.equal(second.skipped, 1);
+  assert.equal((await getDoc(ref(db, 'tanks', 'T1'))).data().balanceMl, 50000);
+  assert.equal((await getDoc(ref(db, 'assets', 'A1'))).data().readingMilli, 100000);
+  assert.equal((await getDocs(collection(db, 'sites', 'base', 'operations'))).size, 0);
+  await assert.rejects(
+    importArchive(db, 'base', 'admin', archivePackage([{ ...archiveRow(), quantityMl: 30000 }]), [
+      'CA111',
+    ]),
+    /outros valores/,
+  );
+  await assertFails(updateDoc(ref(db, 'legacyHistory', p.records[0].id), { quantityMl: 1 }));
+  await assertSucceeds(getDoc(ref(client('manager'), 'legacyHistory', p.records[0].id)));
+  await assertFails(getDoc(ref(client('operator'), 'legacyHistory', p.records[0].id)));
+  await assertFails(getDoc(ref(client('other'), 'legacyHistory', p.records[0].id)));
+});
+test('archive requires own-unit administrator, provenance and strict immutable schema', async () => {
+  const db = client('admin'),
+    p = archivePackage();
+  await assert.rejects(
+    importArchive(client('manager'), 'base', 'manager', p, ['CA111']),
+    /administrador/,
+  );
+  await assert.rejects(importArchive(db, 'other', 'admin', p, ['CA111']), /administrador/);
+  const { id, ...row } = archiveRow();
+  const values = {
+    ...row,
+    contentHash: await rowHash({ id, ...row }),
+    sourceHash: p.sourceHash,
+    importedBy: 'admin',
+    importedAt: serverTimestamp(),
+  };
+  await assertFails(setDoc(ref(db, 'legacyHistory', id), values)); // No manifest.
+  await importArchive(db, 'base', 'admin', p, ['CA111']);
+  await assertFails(
+    setDoc(ref(db, 'legacyHistory', 'c'.repeat(64)), { ...values, quantityMl: -1 }),
+  );
+  await assertFails(setDoc(ref(db, 'legacyHistory', 'c'.repeat(64)), { ...values, tankId: 'T1' }));
+  await assertFails(
+    setDoc(ref(db, 'legacyHistory', 'c'.repeat(64)), { ...values, importedBy: 'manager' }),
+  );
+});
+test('archive import processes multiple batches and a stopped import can safely resume', async () => {
+  const rows = Array.from({ length: 25 }, (_, i) => ({
+    ...archiveRow(i.toString(16).padStart(64, '0')),
+    sourceRow: i + 5,
+  }));
+  const p = archivePackage(rows),
+    db = client('admin');
+  let stop = false;
+  const partial = await importArchive(
+    db,
+    'base',
+    'admin',
+    p,
+    ['CA111'],
+    () => {
+      stop = true;
+    },
+    () => stop,
+  );
+  assert.equal(partial.inserted, 20);
+  assert.ok(partial.stopped);
+  const resumed = await importArchive(db, 'base', 'admin', p, ['CA111']);
+  assert.equal(resumed.inserted, 5);
+  assert.equal(resumed.skipped, 20);
+  assert.equal((await getDocs(collection(db, 'sites', 'base', 'legacyHistory'))).size, 25);
+});
 beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
