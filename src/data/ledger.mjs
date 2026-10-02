@@ -125,6 +125,18 @@ export async function execute(db, site, uid, raw) {
     }
     if (c.kind === 'opening' && (tank.version !== 0 || tank.balanceMl !== 0))
       throw Error('Saldo inicial permitido somente em tanque sem movimentos.');
+    if (c.measurementId) {
+      const m = (await tx.get(ref(db, site, 'measurements', c.measurementId))).data();
+      if (
+        (await tx.get(ref(db, site, 'openingMeasurements', c.measurementId))).exists() ||
+        !m ||
+        m.tankId !== c.tankId ||
+        m.physicalMl !== c.quantityMl ||
+        m.tankVersion !== 0 ||
+        !m.noMovementsSince
+      )
+        throw Error('Medição ausente, já utilizada ou incompatível com a abertura.');
+    }
     const { id, ...body } = c;
     const operation = {
       ...body,
@@ -145,6 +157,13 @@ export async function execute(db, site, uid, raw) {
     if (destination && (destBalance < 0 || destBalance > destination.capacityMl))
       throw Error('Saldo/capacidade do destino inválido.');
     tx.set(opRef, operation);
+    if (c.measurementId)
+      tx.set(ref(db, site, 'openingMeasurements', c.measurementId), {
+        operationId: id,
+        tankId: c.tankId,
+        createdBy: uid,
+        createdAt: serverTimestamp(),
+      });
     tx.update(tankRef, {
       balanceMl: balance,
       version: tank.version + 1,

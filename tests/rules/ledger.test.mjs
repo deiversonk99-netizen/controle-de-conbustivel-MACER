@@ -30,6 +30,13 @@ import {
 import { normalizeCommand, civilDay } from '../../src/domain/business.mjs';
 import { importArchive } from '../../src/data/archive.mjs';
 import { rowHash } from '../../src/domain/archive.mjs';
+import {
+  saveUnit,
+  saveChecks,
+  saveMeasurement,
+  openFromMeasurement,
+  loadSetup,
+} from '../../src/data/setup.mjs';
 let env;
 const client = (uid) => env.authenticatedContext(uid).firestore(),
   ref = (db, g, id) => doc(db, 'sites', 'base', g, id);
@@ -196,6 +203,141 @@ beforeEach(async () => {
     });
     await setDoc(ref(db, 'drivers', 'D1'), { name: 'Motorista', code: 'D1', active: true });
   });
+});
+test('unit metadata is audited and normal administrators cannot create new-unit access', async () => {
+  const db = client('admin'),
+    raw = {
+      name: 'Base conferida',
+      crs: 'MC101',
+      responsibleName: 'Responsável',
+      responsibleEmail: 'pessoa@example.com',
+    };
+  await assertSucceeds(saveUnit(db, 'base', 'admin', raw));
+  await assertSucceeds(
+    saveChecks(db, 'base', 'admin', { assets: true, drivers: true, users: true }),
+  );
+  assert.equal((await getDoc(doc(db, 'sites', 'base'))).data().checks.users, true);
+  await assertFails(
+    updateDoc(doc(db, 'sites', 'base'), { name: 'Sem auditoria', updatedAt: serverTimestamp() }),
+  );
+  await assertFails(updateDoc(doc(db, 'users', 'admin'), { canCreateSites: true }));
+  await assert.rejects(saveUnit(db, 'mc102', 'admin', raw, true), /principal/);
+  await assertFails(setDoc(doc(db, 'sites', 'mc102'), {}));
+  await assertFails(getDoc(doc(client('other'), 'sites', 'base')));
+});
+test('principal administrator creates an audited new unit but cannot grant existing-unit access', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await updateDoc(doc(ctx.firestore(), 'users', 'admin'), { canCreateSites: true });
+    await setDoc(doc(ctx.firestore(), 'sites', 'existing'), { ownerUid: 'other' });
+  });
+  const db = client('admin'),
+    raw = {
+      name: 'Nova unidade',
+      crs: 'MC102',
+      responsibleName: 'Responsável',
+      responsibleEmail: 'pessoa@example.com',
+    };
+  await assertSucceeds(saveUnit(db, 'mc102', 'admin', raw, true));
+  assert.deepEqual((await getDoc(doc(db, 'users', 'admin'))).data().siteIds, ['base', 'mc102']);
+  await assertFails(
+    updateDoc(doc(db, 'users', 'admin'), {
+      siteIds: ['base', 'mc102', 'existing'],
+      unitGrantId: 'existing',
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(db, 'users', 'admin'), {
+      siteIds: ['base', 'mc102', 'fake'],
+      unitGrantId: 'fake',
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(saveUnit(db, 'mc102', 'admin', { ...raw, name: 'Nova obra conferida' }));
+});
+test('physical measurements are immutable, bounded and opening uses exactly the measured stock once', async () => {
+  const db = client('admin'),
+    id = await saveMeasurement(db, 'base', 'admin', {
+      tankId: 'T2',
+      physicalMl: 30000,
+      measuredAtMs: Date.now(),
+      measuredByName: 'Pessoa',
+      reference: 'Régua',
+      noMovementsSince: true,
+    });
+  const measurement = { id, ...(await getDoc(ref(db, 'measurements', id))).data() };
+  assert.equal((await getDoc(ref(db, 'tanks', 'T2'))).data().balanceMl, 0);
+  await assert.rejects(
+    saveMeasurement(db, 'base', 'admin', {
+      ...measurement,
+      id: crypto.randomUUID(),
+      physicalMl: 200000,
+    }),
+    /capacidade/,
+  );
+  await assertFails(updateDoc(ref(db, 'measurements', id), { physicalMl: 40000 }));
+  await assertFails(getDoc(ref(client('operator'), 'measurements', id)));
+  await assert.rejects(
+    openFromMeasurement(db, 'base', 'admin', { ...measurement, physicalMl: 40000 }),
+    /incompatível/,
+  );
+  await assertSucceeds(openFromMeasurement(db, 'base', 'admin', measurement));
+  await assertSucceeds(openFromMeasurement(db, 'base', 'admin', measurement));
+  assert.equal((await getDoc(ref(db, 'tanks', 'T2'))).data().balanceMl, 30000);
+  assert.equal((await getDoc(ref(db, 'operations', id))).data().measurementId, id);
+  await assertFails(
+    setDoc(ref(client('manager'), 'measurements', crypto.randomUUID()), {
+      ...measurement,
+      createdBy: 'manager',
+      createdAt: serverTimestamp(),
+    }),
+  );
+});
+test('measured zero stock is confirmed without a fictitious receipt or opening movement', async () => {
+  const db = client('admin'),
+    id = await saveMeasurement(db, 'base', 'admin', {
+      tankId: 'T2',
+      physicalMl: 0,
+      measuredAtMs: Date.now(),
+      measuredByName: 'Pessoa',
+      reference: 'Vazio conferido',
+      noMovementsSince: true,
+    });
+  const m = { id, ...(await getDoc(ref(db, 'measurements', id))).data() };
+  await assertSucceeds(openFromMeasurement(db, 'base', 'admin', m));
+  assert.equal((await getDoc(ref(db, 'tanks', 'T2'))).data().balanceMl, 0);
+  assert.equal((await getDoc(ref(db, 'operations', id))).exists(), false);
+  assert.equal((await getDoc(ref(db, 'openingMeasurements', id))).data().operationId, '');
+  assert.equal((await getDoc(ref(db, 'tanks', 'T2'))).data().version, 1);
+  await assertSucceeds(openFromMeasurement(db, 'base', 'admin', m));
+  await assert.rejects(
+    execute(
+      db,
+      'base',
+      'admin',
+      command({
+        kind: 'opening',
+        tankId: 'T2',
+        assetId: '',
+        driverId: '',
+        readingMilli: 0,
+        reference: 'Segunda abertura',
+      }),
+    ),
+    /sem movimentos/,
+  );
+  const unconfirmed = await saveMeasurement(db, 'base', 'admin', {
+    ...m,
+    id: crypto.randomUUID(),
+    noMovementsSince: false,
+  });
+  await assert.rejects(
+    openFromMeasurement(db, 'base', 'admin', {
+      id: unconfirmed,
+      ...(await getDoc(ref(db, 'measurements', unconfirmed))).data(),
+    }),
+    /medição conferida/,
+  );
 });
 test('v2 atomically validates driver, money, clock and idempotent retries', async () => {
   const db = client('operator'),

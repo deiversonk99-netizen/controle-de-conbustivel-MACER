@@ -34,6 +34,7 @@ import History from './History';
 import Users from './Users';
 import PendingPanel from './PendingPanel';
 import Migration from './Migration';
+import UnitSetup from './UnitSetup';
 
 export default function OperationsUI({
   uid,
@@ -380,7 +381,12 @@ export default function OperationsUI({
           ['closing', 'Fechamento'],
         ]
       : []),
-    ...(admin ? [['opening', 'Saldo inicial']] : []),
+    ...(admin
+      ? [
+          ['setup', 'Preparar unidade'],
+          ['opening', 'Saldo inicial'],
+        ]
+      : []),
     ['history', 'Histórico'],
     ['queue', `Pendências (${attentionCount})`],
     ...(admin
@@ -447,6 +453,29 @@ export default function OperationsUI({
           {error}
         </p>
       )}
+      {tab === 'setup' && admin && (
+        <UnitSetup
+          key={site + uid}
+          site={site}
+          uid={uid}
+          profile={profile}
+          online={online}
+          data={data}
+          action={action}
+          onDraft={onDraft}
+          navigate={(next) => {
+            if (
+              !draft ||
+              window.confirm(
+                'O preenchimento ainda não salvo será descartado. Deseja abrir outro cadastro?',
+              )
+            ) {
+              onDraft(false);
+              setTab(next);
+            }
+          }}
+        />
+      )}
       {tab === 'migration' && manager && (
         <Migration
           key={site + uid}
@@ -461,6 +490,11 @@ export default function OperationsUI({
       {tab === 'home' && (
         <>
           <section className="card quick-start">
+            {admin && (
+              <button className="secondary" onClick={() => setTab('setup')}>
+                Preparar unidade / iniciar operação
+              </button>
+            )}
             <h2>O que você precisa fazer?</h2>
             <p>
               Para registrar um abastecimento, selecione o veículo, informe a leitura e os litros e
